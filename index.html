@@ -2,50 +2,54 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<title>Planner</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport"
+content="width=device-width, initial-scale=1, viewport-fit=cover">
+
+<title>My Calendar</title>
 
 <link rel="manifest" href="manifest.json">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="styles.css">
+
+<meta name="theme-color" content="#ffffff">
 </head>
+
 <body>
 
-<div class="topbar">
-  <div id="dow"></div>
-  <div id="dayCircle"></div>
-</div>
+<header class="topbar">
+  <div id="dayHeader"></div>
+</header>
 
-<div id="pager">
-  <div class="dayPage" id="pagePrev"></div>
-  <div class="dayPage" id="pageCurrent"></div>
-  <div class="dayPage" id="pageNext"></div>
-</div>
+<div id="calendar"></div>
 
-<!-- bottom sheet -->
+<!-- Bottom sheet -->
+<div id="sheet" class="sheet hidden">
+  <div class="sheet-handle"></div>
+  <input id="titleInput" placeholder="Название события">
+  <div class="sheet-more hidden" id="sheetMore">
 
-<div id="sheet" class="sheet">
-  <div class="handle"></div>
+    <div class="colorRow" id="colorRow"></div>
 
-  <div class="sheet-mini">
-    <input id="titleInput" placeholder="Добавить название">
-  </div>
-
-  <div class="sheet-full">
-    <div class="color-palette" id="palette"></div>
-
-    <label>Повтор</label>
-    <select id="repeatInput">
+    <select id="repeatSelect">
       <option value="none">Не повторяется</option>
       <option value="daily">Каждый день</option>
       <option value="weekly">Каждую неделю</option>
       <option value="monthly">Каждый месяц</option>
     </select>
 
+    <input id="tagsInput" placeholder="Теги через запятую">
+  </div>
+
+  <div class="sheet-buttons">
+    <button id="cancelBtn">Отмена</button>
     <button id="saveBtn">Сохранить</button>
-    <button id="cancelBtn" class="ghost">Отмена</button>
   </div>
 </div>
 
+<script src="storage.js"></script>
+<script src="calendar.js"></script>
+<script src="ui.js"></script>
+<script src="gestures.js"></script>
 <script src="app.js"></script>
+
 </body>
 </html>
