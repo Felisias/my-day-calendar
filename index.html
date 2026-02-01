@@ -1,43 +1,143 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport"
-content="width=device-width,initial-scale=1,viewport-fit=cover">
-
-<title>My Calendar</title>
-
-<link rel="manifest" href="manifest.json">
-<link rel="stylesheet" href="styles.css">
-<meta name="theme-color" content="#ffffff">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Персональный Google Calendar</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/x-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📅</text></svg>">
+    <meta name="theme-color" content="#1a73e8">
 </head>
-
 <body>
+    <!-- Основной контейнер приложения -->
+    <div class="app-container">
+        <!-- Шапка с датой и днем недели -->
+        <header class="app-header">
+            <div class="header-content">
+                <button class="icon-button" id="today-btn">
+                    <span class="material-icons">today</span>
+                </button>
+                <div class="date-display">
+                    <h1 id="current-date">Пн, 1.02</h1>
+                    <div class="current-time" id="current-time">14:30</div>
+                </div>
+                <button class="icon-button" id="menu-btn">
+                    <span class="material-icons">more_vert</span>
+                </button>
+            </div>
+        </header>
 
-<header class="topbar">
-  <div id="dow"></div>
-  <div id="date"></div>
-</header>
+        <!-- Основной контейнер для сетки дня -->
+        <main class="day-container">
+            <!-- Контейнер для свайпа между днями -->
+            <div class="swipe-container" id="swipe-container">
+                <div class="day-grid" id="day-grid">
+                    <!-- Временные метки (00:00 - 23:00) будут сгенерированы JS -->
+                </div>
+                
+                <!-- Контейнер для событий -->
+                <div class="events-container" id="events-container"></div>
+                
+                <!-- Индикатор текущего времени -->
+                <div class="current-time-line" id="current-time-line"></div>
+            </div>
+            
+            <!-- Кнопка добавления события -->
+            <button class="fab" id="add-event-fab">
+                <span class="material-icons">add</span>
+            </button>
+        </main>
+        
+        <!-- Sheet панель для создания/редактирования событий -->
+        <div class="sheet" id="event-sheet">
+            <div class="sheet-handle"></div>
+            <div class="sheet-content">
+                <div class="sheet-header">
+                    <h2 id="sheet-title">Новое событие</h2>
+                    <button class="icon-button sheet-close" id="sheet-close">
+                        <span class="material-icons">close</span>
+                    </button>
+                </div>
+                
+                <div class="form-group">
+                    <input type="text" 
+                           id="event-title" 
+                           class="event-title-input" 
+                           placeholder="Добавить название" 
+                           autocomplete="off">
+                </div>
+                
+                <div class="expanded-content" id="expanded-content">
+                    <div class="form-group">
+                        <label class="form-label">
+                            <span class="material-icons">schedule</span>
+                            <span>Время</span>
+                        </label>
+                        <div class="time-inputs">
+                            <input type="time" id="event-start-time" value="09:00">
+                            <span class="time-separator">-</span>
+                            <input type="time" id="event-end-time" value="10:00">
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">
+                            <span class="material-icons">palette</span>
+                            <span>Цвет</span>
+                        </label>
+                        <div class="color-picker" id="color-picker">
+                            <!-- Цвета будут сгенерированы JS -->
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">
+                            <span class="material-icons">repeat</span>
+                            <span>Повторение</span>
+                        </label>
+                        <select id="event-repeat" class="repeat-select">
+                            <option value="none">Не повторяется</option>
+                            <option value="daily">Ежедневно</option>
+                            <option value="weekly">Еженедельно</option>
+                            <option value="monthly">Ежемесячно</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">
+                            <span class="material-icons">notes</span>
+                            <span>Описание</span>
+                        </label>
+                        <textarea id="event-description" 
+                                  class="event-description" 
+                                  placeholder="Добавить описание"></textarea>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button class="btn btn-secondary" id="delete-event-btn">
+                            <span class="material-icons">delete</span>
+                            Удалить
+                        </button>
+                        <button class="btn btn-primary" id="save-event-btn">
+                            <span class="material-icons">save</span>
+                            Сохранить
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Overlay для sheet -->
+        <div class="sheet-overlay" id="sheet-overlay"></div>
+        
+        <!-- Preview при создании события -->
+        <div class="event-preview" id="event-preview"></div>
+    </div>
 
-<div id="dayViewport">
-  <div id="daySlider"></div>
-</div>
-
-<!-- sheet -->
-<div id="sheet" class="sheet hidden">
-  <div class="sheet-handle"></div>
-
-  <div class="sheet-row">
-    <input id="titleInput" placeholder="Название события">
-    <button id="closeBtn">✕</button>
-  </div>
-
-  <div id="sheetMore" class="sheet-more">
-    <div id="colorRow"></div>
-    <button id="saveBtn">Сохранить</button>
-  </div>
-</div>
-
-<script src="app.js"></script>
+    <!-- Иконочный шрифт Material Icons -->
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    
+    <script src="app.js"></script>
 </body>
-</html>
+                              </html>
