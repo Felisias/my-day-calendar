@@ -1,9 +1,8 @@
 {
-  "name": "Smart Calendar",
+  "name": "My Calendar",
   "short_name": "Calendar",
-  "start_url": ".",
   "display": "standalone",
+  "start_url": ".",
   "theme_color": "#4285F4",
-  "background_color": "#ffffff",
-  "icons": []
+  "background_color": "#ffffff"
 }
