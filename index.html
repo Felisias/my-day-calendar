@@ -2,66 +2,48 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<title>My Smart Calendar</title>
-
+<title>My Calendar</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<link rel="stylesheet" href="style.css">
 <link rel="manifest" href="manifest.json">
+<link rel="stylesheet" href="style.css">
 </head>
 
 <body>
 
-<header>
-  <div class="title">Мой календарь</div>
-
-  <div class="controls">
-    <button id="dayViewBtn">День</button>
-    <button id="weekViewBtn">Неделя</button>
-    <button id="zoomInBtn">+</button>
-    <button id="zoomOutBtn">−</button>
-    <button id="addBtn">+ Событие</button>
-  </div>
-</header>
+<div id="topbar">
+  <button id="prevBtn">◀</button>
+  <div id="dateTitle"></div>
+  <button id="nextBtn">▶</button>
+  <button id="modeBtn">День</button>
+</div>
 
 <div id="weekHeader"></div>
 <div id="calendar"></div>
 
-<!-- Модальное окно -->
+<!-- Bottom sheet -->
 
-<div id="modal" class="modal hidden">
-  <div class="modal-content">
+<div id="sheet" class="sheet hidden">
+  <div id="sheetHandle"></div>
 
-    <h2>Событие</h2>
+  <input id="titleInput" placeholder="Название">
 
-    <input id="titleInput" placeholder="Название">
-
-    <label>Начало</label>
-    <input id="startInput" type="time">
-
-    <label>Конец</label>
-    <input id="endInput" type="time">
-
-    <label>Цвет</label>
-    <input id="colorInput" type="color" value="#4285F4">
-
-    <label>Категория</label>
-    <input id="categoryInput" placeholder="Учёба / Тренировка / Работа">
-
-    <label>Теги (через запятую)</label>
-    <input id="tagsInput" placeholder="важно, deep, код">
-
-    <label>Повтор</label>
-    <select id="repeatInput">
-      <option value="none">Нет</option>
-      <option value="daily">Каждый день</option>
-      <option value="weekly">Каждую неделю</option>
-    </select>
-
-    <button id="saveBtn">Сохранить</button>
-    <button id="cancelBtn">Отмена</button>
-
+  <div class="row">
+    <input type="time" id="startInput">
+    <input type="time" id="endInput">
   </div>
+
+  <input type="color" id="colorInput" value="#4285F4">
+  <input id="categoryInput" placeholder="Категория">
+  <input id="tagsInput" placeholder="Теги">
+  
+  <select id="repeatInput">
+    <option value="none">Без повтора</option>
+    <option value="daily">Каждый день</option>
+    <option value="weekly">Каждую неделю</option>
+  </select>
+
+  <button id="saveBtn">Сохранить</button>
 </div>
 
 <script src="app.js"></script>
