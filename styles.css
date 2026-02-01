@@ -1,161 +1,132 @@
-* { box-sizing:border-box; }
+*{box-sizing:border-box}
 
-body {
-  margin:0;
-  font-family: system-ui, -apple-system;
-  background:#fff;
-  overscroll-behavior: none;
+body{
+ margin:0;
+ font-family:system-ui,-apple-system;
+ background:#fff;
+ overflow:hidden;
 }
 
-.topbar {
-  text-align:center;
-  padding:12px 8px;
-  border-bottom:1px solid #eee;
-  background:#fff;
-  position:sticky;
-  top:0;
-  z-index:5;
+.topbar{
+ text-align:center;
+ padding:10px;
+ border-bottom:1px solid #eee;
+ background:#fff;
+ z-index:5;
 }
 
-.dow {
-  font-size:12px;
-  color:#777;
+#dow{font-size:12px;color:#777}
+#date{font-size:20px;font-weight:600}
+
+#dayViewport{
+ position:absolute;
+ top:64px;
+ bottom:0;
+ left:0;
+ right:0;
+ overflow:hidden;
+ touch-action:pan-y;
 }
 
-.date {
-  font-size:20px;
-  font-weight:600;
+.day{
+ position:absolute;
+ top:0;bottom:0;
+ width:100%;
+ overflow-y:auto;
 }
 
-#dayContainer {
-  height: calc(100vh - 64px);
-  overflow-y:auto;
-  -webkit-overflow-scrolling:touch;
+.hour{
+ height:60px;
+ border-bottom:1px solid #eee;
+ position:relative;
 }
 
-.hour {
-  height:60px;
-  border-bottom:1px solid #eee;
-  position:relative;
+.hourLabel{
+ position:absolute;
+ left:6px;
+ top:-8px;
+ font-size:11px;
+ color:#999;
 }
 
-.hourLabel {
-  position:absolute;
-  left:6px;
-  top:-8px;
-  font-size:11px;
-  color:#888;
+.event{
+ position:absolute;
+ left:64px;
+ right:8px;
+ border-radius:12px;
+ padding:6px;
+ color:#fff;
+ font-size:13px;
+ touch-action:none;
 }
 
-.event {
-  position:absolute;
-  left:64px;
-  right:8px;
-  border-radius:12px;
-  padding:6px;
-  color:white;
-  font-size:13px;
-  overflow:hidden;
-  touch-action:none;
+.preview{
+ position:absolute;
+ left:64px;
+ right:8px;
+ border:2px dashed #1a73e8;
+ border-radius:12px;
+ background:#1a73e822;
 }
 
-.handle {
-  position:absolute;
-  left:0;
-  right:0;
-  height:14px;
+.handle{
+ position:absolute;
+ left:0;right:0;
+ height:16px;
 }
 
-.handle.top { top:-7px; }
-.handle.bottom { bottom:-7px; }
+.handle.top{top:-8px}
+.handle.bottom{bottom:-8px}
 
-.handle::after {
-  content:"";
-  width:26px;
-  height:4px;
-  background:#ffffffcc;
-  border-radius:4px;
-  display:block;
-  margin:5px auto;
+.handle::after{
+ content:"";
+ width:26px;
+ height:4px;
+ background:#ffffffcc;
+ border-radius:4px;
+ display:block;
+ margin:6px auto;
 }
 
-/* bottom sheet */
+/* sheet */
 
-.sheet {
-  position:fixed;
-  left:0;
-  right:0;
-  bottom:0;
-  background:white;
-  border-radius:20px 20px 0 0;
-  box-shadow:0 -6px 24px rgba(0,0,0,.18);
-  transform: translateY(100%);
-  transition: transform .25s;
-  padding:12px;
-  z-index:20;
+.sheet{
+ position:fixed;
+ left:0;right:0;bottom:0;
+ background:white;
+ border-radius:20px 20px 0 0;
+ box-shadow:0 -6px 24px rgba(0,0,0,.18);
+ transform:translateY(100%);
+ transition:.25s;
+ padding:12px;
 }
 
-.sheet.show {
-  transform: translateY(0);
+.sheet.show{ transform:translateY(0); }
+
+.sheet-row{
+ display:flex;
+ gap:8px;
 }
 
-.sheet-handle {
-  width:42px;
-  height:5px;
-  background:#ccc;
-  border-radius:5px;
-  margin:6px auto 10px;
+.sheet-row input{
+ flex:1;
+ padding:12px;
+ font-size:16px;
+ border-radius:12px;
+ border:1px solid #ddd;
 }
 
-.sheet-header {
-  display:flex;
-  gap:8px;
+.sheet-more{
+ max-height:0;
+ overflow:hidden;
+ transition:.25s;
 }
 
-.sheet-header input {
-  flex:1;
-  padding:12px;
-  font-size:16px;
-  border-radius:12px;
-  border:1px solid #ddd;
+.sheet.expanded .sheet-more{
+ max-height:200px;
 }
 
-.sheet-header button {
-  border:none;
-  background:none;
-  font-size:20px;
+.colorDot{
+ width:28px;height:28px;
+ border-radius:50%;
 }
-
-.sheet-more {
-  margin-top:10px;
-  max-height:0;
-  overflow:hidden;
-  transition:max-height .25s;
-}
-
-.sheet.expanded .sheet-more {
-  max-height:300px;
-}
-
-#colorRow {
-  display:flex;
-  gap:10px;
-  margin:8px 0;
-}
-
-.colorDot {
-  width:28px;
-  height:28px;
-  border-radius:50%;
-}
-
-.saveBtn {
-  width:100%;
-  padding:14px;
-  border:none;
-  border-radius:14px;
-  background:#1a73e8;
-  color:white;
-  font-size:16px;
-  margin-top:10px;
-  }
