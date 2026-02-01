@@ -1,226 +1,224 @@
-const calendar = document.getElementById("calendar");
-const modal = document.getElementById("modal");
+const cal = document.getElementById("calendar");
+const sheet = document.getElementById("sheet");
 
-const addBtn = document.getElementById("addBtn");
-const saveBtn = document.getElementById("saveBtn");
-const cancelBtn = document.getElementById("cancelBtn");
+let hourH = 100;
+document.documentElement.style.setProperty("--hourH", hourH+"px");
 
-const dayBtn = document.getElementById("dayViewBtn");
-const weekBtn = document.getElementById("weekViewBtn");
-
-const zoomInBtn = document.getElementById("zoomInBtn");
-const zoomOutBtn = document.getElementById("zoomOutBtn");
-
-let viewMode = "day";
-let hourHeight = 100;
-document.documentElement.style.setProperty("--hourHeight", hourHeight + "px");
-
-const PX_PER_MIN = () => hourHeight / 60;
 const SNAP = 15;
 
-let events = loadEvents();
-let selectedDate = new Date();
+let mode = "day";
+let baseDate = new Date();
+let events = load();
 
-renderAll();
+render();
 
-/* ---------- VIEW ---------- */
+/* ---------- TAP CREATE ---------- */
 
-dayBtn.onclick = () => { viewMode = "day"; renderAll(); };
-weekBtn.onclick = () => { viewMode = "week"; renderAll(); };
+cal.onclick = e => {
+  if (e.target !== cal) return;
 
-zoomInBtn.onclick = () => {
-  hourHeight = Math.min(200, hourHeight + 20);
-  document.documentElement.style.setProperty("--hourHeight", hourHeight + "px");
-  renderAll();
+  const y = cal.scrollTop + e.clientY;
+  const mins = snap(Math.floor(y / (hourH/60)));
+
+  startInput.value = minToTime(mins);
+  endInput.value = minToTime(mins+60);
+
+  openSheet();
 };
 
-zoomOutBtn.onclick = () => {
-  hourHeight = Math.max(60, hourHeight - 20);
-  document.documentElement.style.setProperty("--hourHeight", hourHeight + "px");
-  renderAll();
-};
+/* ---------- BOTTOM SHEET ---------- */
 
-/* ---------- MODAL ---------- */
-
-addBtn.onclick = () => modal.classList.remove("hidden");
-cancelBtn.onclick = () => modal.classList.add("hidden");
+function openSheet(){
+  sheet.classList.add("show");
+}
 
 saveBtn.onclick = () => {
-  const ev = {
+  events.push({
     id: Date.now(),
+    date: key(baseDate),
     title: titleInput.value,
     start: startInput.value,
     end: endInput.value,
     color: colorInput.value,
     category: categoryInput.value,
     tags: tagsInput.value,
-    repeat: repeatInput.value,
-    date: dateKey(selectedDate)
-  };
-
-  events.push(ev);
-  saveEvents();
-  modal.classList.add("hidden");
-  renderAll();
+    repeat: repeatInput.value
+  });
+  store();
+  sheet.classList.remove("show");
+  render();
 };
 
 /* ---------- RENDER ---------- */
 
-function renderAll() {
-  calendar.innerHTML = "";
-  renderHours();
-  if (viewMode === "week") renderWeekLines();
-  renderEventsExpanded();
+function render(){
+  cal.innerHTML="";
+  drawHours();
+  drawEvents(layout(expand(events)));
+  dateTitle.innerText = baseDate.toDateString();
 }
 
-function renderHours() {
-  for (let h=0; h<24; h++) {
-    const d = document.createElement("div");
-    d.className = "hour-label";
-    d.style.top = (h * hourHeight - 6) + "px";
-    d.innerText = String(h).padStart(2,"0")+":00";
-    calendar.appendChild(d);
+function drawHours(){
+  for(let h=0;h<24;h++){
+    const d=document.createElement("div");
+    d.className="hour";
+    d.style.top=(h*hourH-6)+"px";
+    d.innerText=h+":00";
+    cal.appendChild(d);
   }
 }
 
-function renderWeekLines() {
-  for (let i=1;i<7;i++){
-    const line = document.createElement("div");
-    line.className="day-col-line";
-    line.style.left = (i*(100/7))+"%";
-    calendar.appendChild(line);
-  }
+/* ---------- EVENT LAYOUT (overlap like google) ---------- */
+
+function layout(list){
+  list.sort((a,b)=>toMin(a.start)-toMin(b.start));
+  let cols=[];
+
+  list.forEach(ev=>{
+    let placed=false;
+    for(let col of cols){
+      if(toMin(ev.start)>=col.end){
+        col.items.push(ev);
+        col.end=toMin(ev.end);
+        placed=true;
+        break;
+      }
+    }
+    if(!placed){
+      cols.push({end:toMin(ev.end),items:[ev]});
+    }
+  });
+
+  const width = 90/cols.length;
+
+  cols.forEach((col,i)=>{
+    col.items.forEach(ev=>{
+      ev._left = 60 + i*width;
+      ev._width = width-2;
+    });
+  });
+
+  return list;
 }
 
-function renderEventsExpanded() {
-  const list = expandRepeats(events);
+function drawEvents(list){
+  list.forEach(ev=>{
+    const el=document.createElement("div");
+    el.className="event";
+    el.style.background=ev.color;
 
-  list.forEach(ev => drawEvent(ev));
-}
+    const s=toMin(ev.start);
+    const e=toMin(ev.end);
 
-function drawEvent(ev) {
-  const start = timeToMin(ev.start);
-  const end = timeToMin(ev.end);
+    el.style.top=s*(hourH/60)+"px";
+    el.style.height=(e-s)*(hourH/60)+"px";
+    el.style.left=ev._left+"%";
+    el.style.width=ev._width+"%";
 
-  const el = document.createElement("div");
-  el.className = "event";
-  el.style.background = ev.color;
+    el.innerHTML = ev.title;
 
-  el.style.top = start * PX_PER_MIN() + "px";
-  el.style.height = (end-start) * PX_PER_MIN() + "px";
+    enableDrag(el,ev);
+    enableResize(el,ev);
 
-  if (viewMode === "week") {
-    const dayIndex = dayOffset(ev.date);
-    el.style.left = (dayIndex*(100/7)+1)+"%";
-    el.style.width = (100/7 - 2)+"%";
-  } else {
-    el.style.left = "60px";
-    el.style.right = "6px";
-  }
-
-  el.innerHTML = `
-    <div class="event-title">${ev.title}</div>
-    <div>${ev.category || ""}</div>
-    <div class="event-tags">${ev.tags || ""}</div>
-  `;
-
-  makeDraggable(el, ev);
-  calendar.appendChild(el);
+    cal.appendChild(el);
+  });
 }
 
 /* ---------- DRAG ---------- */
 
-function makeDraggable(el, ev) {
-  let startY, startTop;
+function enableDrag(el,ev){
+  let sy, st;
 
-  el.onpointerdown = e => {
-    startY = e.clientY;
-    startTop = parseFloat(el.style.top);
+  el.onpointerdown = e=>{
+    sy=e.clientY;
+    st=parseFloat(el.style.top);
     el.setPointerCapture(e.pointerId);
   };
 
-  el.onpointermove = e => {
-    if (startY == null) return;
-
-    const dy = e.clientY - startY;
-    let newTop = startTop + dy;
-
-    let minutes = newTop / PX_PER_MIN();
-    minutes = Math.round(minutes / SNAP) * SNAP;
-    newTop = minutes * PX_PER_MIN();
-
-    el.style.top = newTop + "px";
+  el.onpointermove = e=>{
+    if(sy==null) return;
+    let dy=e.clientY-sy;
+    let mins = snap((st+dy)/(hourH/60));
+    el.style.top = mins*(hourH/60)+"px";
   };
 
-  el.onpointerup = () => {
-    const minutes = parseFloat(el.style.top) / PX_PER_MIN();
-    const dur = timeToMin(ev.end) - timeToMin(ev.start);
-
-    ev.start = minToTime(minutes);
-    ev.end = minToTime(minutes + dur);
-
-    saveEvents();
-    startY = null;
+  el.onpointerup = ()=>{
+    const mins=parseFloat(el.style.top)/(hourH/60);
+    const dur=toMin(ev.end)-toMin(ev.start);
+    ev.start=minToTime(mins);
+    ev.end=minToTime(mins+dur);
+    store();
+    sy=null;
   };
 }
 
+/* ---------- RESIZE ---------- */
+
+function enableResize(el,ev){
+  const r=document.createElement("div");
+  r.className="resize";
+  el.appendChild(r);
+
+  let sy, sh;
+
+  r.onpointerdown=e=>{
+    e.stopPropagation();
+    sy=e.clientY;
+    sh=parseFloat(el.style.height);
+  };
+
+  r.onpointermove=e=>{
+    if(sy==null) return;
+    let dy=e.clientY-sy;
+    let mins=snap((sh+dy)/(hourH/60));
+    el.style.height=mins*(hourH/60)+"px";
+  };
+
+  r.onpointerup=()=>{
+    const dur=parseFloat(el.style.height)/(hourH/60);
+    ev.end=minToTime(toMin(ev.start)+dur);
+    store();
+    sy=null;
+  };
+}
+
+/* ---------- SWIPE DAY ---------- */
+
+let touchX;
+
+document.body.addEventListener("touchstart",e=>{
+  touchX=e.touches[0].clientX;
+});
+
+document.body.addEventListener("touchend",e=>{
+  const dx=e.changedTouches[0].clientX-touchX;
+  if(Math.abs(dx)>60){
+    baseDate.setDate(baseDate.getDate()+(dx<0?1:-1));
+    render();
+  }
+});
+
 /* ---------- REPEAT ---------- */
 
-function expandRepeats(base) {
-  const out = [];
-
-  base.forEach(ev => {
-    if (ev.repeat === "none") out.push(ev);
-
-    if (ev.repeat === "daily") {
-      for (let i=0;i<7;i++){
-        out.push({...ev, date: shiftDate(ev.date,i)});
-      }
-    }
-
-    if (ev.repeat === "weekly") {
-      for (let i=0;i<4;i++){
-        out.push({...ev, date: shiftDate(ev.date,i*7)});
-      }
-    }
+function expand(list){
+  const out=[];
+  list.forEach(ev=>{
+    if(ev.repeat==="none") out.push(ev);
+    if(ev.repeat==="daily")
+      for(let i=0;i<7;i++) out.push({...ev,date:shift(ev.date,i)});
+    if(ev.repeat==="weekly")
+      for(let i=0;i<4;i++) out.push({...ev,date:shift(ev.date,i*7)});
   });
-
-  return out;
+  return out.filter(e=>e.date===key(baseDate));
 }
 
 /* ---------- UTILS ---------- */
 
-function timeToMin(t){
-  const [h,m]=t.split(":").map(Number);
-  return h*60+m;
-}
+function toMin(t){let[a,b]=t.split(":");return a*60+ +b;}
+function minToTime(m){m=Math.max(0,m);return String(m/60|0).padStart(2,"0")+":"+String(m%60).padStart(2,"0")}
+function snap(m){return Math.round(m/SNAP)*SNAP}
+function key(d){return d.toISOString().slice(0,10)}
+function shift(k,d){let x=new Date(k);x.setDate(x.getDate()+d);return key(x)}
 
-function minToTime(m){
-  m = Math.max(0, Math.min(1439, m));
-  const h=Math.floor(m/60);
-  const mm=m%60;
-  return String(h).padStart(2,"0")+":"+String(mm).padStart(2,"0");
-}
-
-function dateKey(d){
-  return d.toISOString().slice(0,10);
-}
-
-function shiftDate(key,days){
-  const d=new Date(key);
-  d.setDate(d.getDate()+days);
-  return dateKey(d);
-}
-
-function dayOffset(key){
-  const d=new Date(key);
-  return (d.getDay()+6)%7;
-}
-
-function saveEvents(){
-  localStorage.setItem("smartcal_events", JSON.stringify(events));
-}
-
-function loadEvents(){
-  return JSON.parse(localStorage.getItem("smartcal_events")||"[]");
-}
+function store(){localStorage.setItem("cal",JSON.stringify(events))}
+function load(){return JSON.parse(localStorage.getItem("cal")||"[]")}
