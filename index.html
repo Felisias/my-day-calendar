@@ -2,46 +2,48 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<title>Day Planner</title>
+<title>Planner</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
 <link rel="manifest" href="manifest.json">
 <link rel="stylesheet" href="style.css">
 </head>
-
 <body>
 
 <div class="topbar">
-  <button id="prevBtn">‹</button>
-  <div id="dateLabel"></div>
-  <button id="nextBtn">›</button>
+  <div id="dow"></div>
+  <div id="dayCircle"></div>
 </div>
 
-<div id="calendar"></div>
+<div id="pager">
+  <div class="dayPage" id="pagePrev"></div>
+  <div class="dayPage" id="pageCurrent"></div>
+  <div class="dayPage" id="pageNext"></div>
+</div>
 
 <!-- bottom sheet -->
 
 <div id="sheet" class="sheet">
-  <div class="sheet-handle"></div>
+  <div class="handle"></div>
 
-  <input id="titleInput" class="g-input" placeholder="Название">
-
-  <div class="time-row">
-    <input type="time" id="startInput" class="g-input">
-    <span>—</span>
-    <input type="time" id="endInput" class="g-input">
+  <div class="sheet-mini">
+    <input id="titleInput" placeholder="Добавить название">
   </div>
 
-  <div class="color-row">
-    <input type="color" id="colorInput" value="#4285F4">
-    <select id="repeatInput" class="g-input">
-      <option value="none">Без повтора</option>
+  <div class="sheet-full">
+    <div class="color-palette" id="palette"></div>
+
+    <label>Повтор</label>
+    <select id="repeatInput">
+      <option value="none">Не повторяется</option>
       <option value="daily">Каждый день</option>
       <option value="weekly">Каждую неделю</option>
+      <option value="monthly">Каждый месяц</option>
     </select>
-  </div>
 
-  <button id="saveBtn" class="g-btn">Сохранить</button>
+    <button id="saveBtn">Сохранить</button>
+    <button id="cancelBtn" class="ghost">Отмена</button>
+  </div>
 </div>
 
 <script src="app.js"></script>
