@@ -1,4 +1,3 @@
-// Простой Service Worker для кэширования
 self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
