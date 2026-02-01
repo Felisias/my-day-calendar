@@ -3,53 +3,51 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport"
-content="width=device-width, initial-scale=1, viewport-fit=cover">
+content="width=device-width,initial-scale=1,viewport-fit=cover">
 
-<title>My Calendar</title>
+<title>My Day Calendar</title>
 
 <link rel="manifest" href="manifest.json">
 <link rel="stylesheet" href="styles.css">
-
 <meta name="theme-color" content="#ffffff">
 </head>
 
 <body>
 
 <header class="topbar">
-  <div id="dayHeader"></div>
+  <div class="dow" id="dow"></div>
+  <div class="date" id="date"></div>
 </header>
 
-<div id="calendar"></div>
+<div id="dayContainer">
+  <div id="dayGrid"></div>
+</div>
 
-<!-- Bottom sheet -->
+<!-- bottom sheet -->
 <div id="sheet" class="sheet hidden">
-  <div class="sheet-handle"></div>
-  <input id="titleInput" placeholder="Название события">
-  <div class="sheet-more hidden" id="sheetMore">
+  <div id="sheetHandle" class="sheet-handle"></div>
 
-    <div class="colorRow" id="colorRow"></div>
+  <div class="sheet-header">
+    <input id="titleInput" placeholder="Название события">
+    <button id="closeSheet">✕</button>
+  </div>
 
-    <select id="repeatSelect">
-      <option value="none">Не повторяется</option>
+  <div id="sheetMore" class="sheet-more">
+    <label>Цвет</label>
+    <div id="colorRow"></div>
+
+    <label>Повтор</label>
+    <select id="repeat">
+      <option value="none">Нет</option>
       <option value="daily">Каждый день</option>
       <option value="weekly">Каждую неделю</option>
       <option value="monthly">Каждый месяц</option>
     </select>
 
-    <input id="tagsInput" placeholder="Теги через запятую">
-  </div>
-
-  <div class="sheet-buttons">
-    <button id="cancelBtn">Отмена</button>
-    <button id="saveBtn">Сохранить</button>
+    <button id="saveBtn" class="saveBtn">Сохранить</button>
   </div>
 </div>
 
-<script src="storage.js"></script>
-<script src="calendar.js"></script>
-<script src="ui.js"></script>
-<script src="gestures.js"></script>
 <script src="app.js"></script>
-
 </body>
 </html>
