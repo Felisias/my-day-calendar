@@ -1,8 +1,15 @@
 {
-  "name":"Planner",
-  "short_name":"Planner",
-  "display":"standalone",
-  "start_url":".",
-  "theme_color":"#4285F4",
-  "background_color":"#ffffff"
+  "name": "My Calendar",
+  "short_name": "Calendar",
+  "display": "standalone",
+  "start_url": ".",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "icons": [
+    {
+      "src": "icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
 }
