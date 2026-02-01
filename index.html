@@ -2,8 +2,8 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<title>My Calendar</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Day Planner</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 
 <link rel="manifest" href="manifest.json">
 <link rel="stylesheet" href="style.css">
@@ -11,39 +11,37 @@
 
 <body>
 
-<div id="topbar">
-  <button id="prevBtn">◀</button>
-  <div id="dateTitle"></div>
-  <button id="nextBtn">▶</button>
-  <button id="modeBtn">День</button>
+<div class="topbar">
+  <button id="prevBtn">‹</button>
+  <div id="dateLabel"></div>
+  <button id="nextBtn">›</button>
 </div>
 
-<div id="weekHeader"></div>
 <div id="calendar"></div>
 
-<!-- Bottom sheet -->
+<!-- bottom sheet -->
 
-<div id="sheet" class="sheet hidden">
-  <div id="sheetHandle"></div>
+<div id="sheet" class="sheet">
+  <div class="sheet-handle"></div>
 
-  <input id="titleInput" placeholder="Название">
+  <input id="titleInput" class="g-input" placeholder="Название">
 
-  <div class="row">
-    <input type="time" id="startInput">
-    <input type="time" id="endInput">
+  <div class="time-row">
+    <input type="time" id="startInput" class="g-input">
+    <span>—</span>
+    <input type="time" id="endInput" class="g-input">
   </div>
 
-  <input type="color" id="colorInput" value="#4285F4">
-  <input id="categoryInput" placeholder="Категория">
-  <input id="tagsInput" placeholder="Теги">
-  
-  <select id="repeatInput">
-    <option value="none">Без повтора</option>
-    <option value="daily">Каждый день</option>
-    <option value="weekly">Каждую неделю</option>
-  </select>
+  <div class="color-row">
+    <input type="color" id="colorInput" value="#4285F4">
+    <select id="repeatInput" class="g-input">
+      <option value="none">Без повтора</option>
+      <option value="daily">Каждый день</option>
+      <option value="weekly">Каждую неделю</option>
+    </select>
+  </div>
 
-  <button id="saveBtn">Сохранить</button>
+  <button id="saveBtn" class="g-btn">Сохранить</button>
 </div>
 
 <script src="app.js"></script>
