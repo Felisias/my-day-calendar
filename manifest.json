@@ -1,8 +1,40 @@
 {
- "name":"My Calendar",
- "short_name":"Calendar",
- "display":"standalone",
- "start_url":".",
- "background_color":"#ffffff",
- "theme_color":"#ffffff"
+  "name": "Персональный Google Calendar",
+  "short_name": "Мой Календарь",
+  "description": "Персональный календарь с функциями Google Calendar",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1a73e8",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22 fill=%22%231a73e8%22>📅</text></svg>",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAOEAAADhCAMAAAAJbSJIAAAAeFBMVEX///8AAAAWFhYcHBz4+PhSUlK+vr78/Pyvr6/Dw8Pk5OQ/Pz/29vZfX1/Hx8fMzMza2tq0tLSioqKcnJyIiIg5OTlqamodHR1tbW0LCwt3d3c0NDQSEhKLi4sqKiohISFGRkYlJSU9PT1BQUGXl5dNTU1ZWVm/yje/AAAGoElEQVR4nO2d4XqjKhCAYQIhGBMbo4k9t93t+3/dHuy1t9t7mwzMDCDJ7/dnbeMHEkFmkAcAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAeJ8xHJ73L/fn5hH/+G+Px8O3p3vy3J33U8PYjJt2Yr2nRZ4mZdtmRVm29arN1nPz6d6g6zdd+Ov0ePj59eHh1+f71y82fPvJnk+XFgf/Q//4zJ5K8qP/+se4P3T8d87P8+PhvM4p1dzN0+T1oNs4pdeqv9y7nPVN6R3pn3bj6tQ8Pl2+ljw6Z67dno/7vrN9OCnx98+mWLw3tJuF2aUv1gfttnK3z3pJ9mb2PKy9Ht2L+Y1mep++1fXzz3twzrHHav5PhjEf7thVsz14vC9+/mALRf8/S6ZPD/RDrMvS0/+6JmK3q7VTG4u2i6JNuyFZNlI9fu2O8mv1SOrtP+5M+3pO6L31SPFwL9XfL9XVQ3UX66cd++vFwdF/H71o/3q4c2n3WrSf/du/eO39yofblm5GP2gfd16M//yW9FL+mJ04d0tTTdPj7M6llfdm8+/DRF7a/3pw3Naf2Y17J8Vd6q/7+fsn5lfy94tLB7U2/PnR6d4NOzm+OHT3m50bq+P9mPyc/O3gtWOX6e11O7h19r+r+dvO4K3a36L9+Kj2GxPr9cu7wz9PXnsv77OzdXv4/I3o+KH53JX28tC7a54dlNWPXH93spm2k+YyPLd77Zll1xPj0WFF/Vj/9xE/KqUfX79MLe3j//49GfT/e+lV3e1i8bGVvT7p/Znxw0Mtrc9fn0n/+OD+5WV99/od0KdR5z+fXn9fOftn4+fvFePD4TXq9pFQ3K79vVvgdWvxNui7P1W77OXj7n9nXe3Xt3m0W0f33f3v/N9T2Ql9fepnUuzXnqX/zSJ9f+itm8vooxdrP9fWXPj4qJtvH0Lt62OJr21/t2d/+8duVwqfE+5Xzz/0Pz3hldmE8uHhH6e+dLf3T/qf9E+78fPT0e5jq0/v/L/vFmpd9MptO7z2+/0C1sLdaT19o4lz9e1a0r6r3S3gD+yPcv1+vKQ+bs4PU/7/8nefq/11Qv3o+J9aq21T7LaU9i4faJc1w0W5rcVqM02P8zH54I7Rtw6l5X42xE7tNVlf/qj9OFT6deX7ef2h9vP4Se2/RFdPt3wLxV/lw1+qD8WPg/Txb+M/09X0x3T5/9P/oI9rv6a19HNHPp3fz2l7/5U+qH9+L/3Sg8mN60/t3x8/5J0+Z4TyaXr8+1O5f/4h5D7dHD5fF5q20e9kD+3d7f/3Y/pWZ+rdanH7l2tG1y7+l7vf7X8+3c1Vnz3C4f8QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD4D3j9B0Kd2XwOIIlOAAAAAElFTkSuQmCC",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAOEAAADhCAMAAAAJbSJIAAAAeFBMVEX///8AAAAWFhYcHBz4+PhSUlK+vr78/Pyvr6/Dw8Pk5OQ/Pz/29vZfX1/Hx8fMzMza2tq0tLSioqKcnJyIiIg5OTlqamodHR1tbW0LCwt3d3c0NDQSEhKLi4sqKiohISFGRkYlJSU9PT1BQUGXl5dNTU1ZWVm/yje/AAAGoElEQVR4nO2d4XqjKhCAYQIhGBMbo4k9t93t+3/dHuy1t9t7mwzMDCDJ7/dnbeMHEkFmkAcAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAeJ8xHJ73L/fn5hH/+G+Px8O3p3vy3J33U8PYjJt2Yr2nRZ4mZdtmRVm29arN1nPz6d6g6zdd+Ov0ePj59eHh1+f71y82fPvJnk+XFgf/Q//4zJ5K8qP/+se4P3T8d87P8+PhvM4p1dzN0+T1oNs4pdeqv9y7nPVN6R3pn3bj6tQ8Pl2+ljw6Z67dno/7vrN9OCnx98+mWLw3tJuF2aUv1gfttnK3z3pJ9mb2PKy9Ht2L+Y1mep++1fXzz3twzrHHav5PhjEf7thVsz14vC9+/mALRf8/S6ZPD/RDrMvS0/+6JmK3q7VTG4u2i6JNuyFZNlI9fu2O8mv1SOrtP+5M+3pO6L31SPFwL9XfL9XVQ3UX66cd++vFwdF/H71o/3q4c2n3WrSf/du/eO39yofblm5GP2gfd16M//yW9FL+mJ04d0tTTdPj7M6llfdm8+/DRF7a/3pw3Naf2Y17J8Vd6q/7+fsn5lfy94tLB7U2/PnR6d4NOzm+OHT3m50bq+P9mPyc/O3gtWOX6e11O7h19r+r+dvO4K3a36L9+Kj2GxPr9cu7wz9PXnsv77OzdXv4/I3o+KH53JX28tC7a54dlNWPXH93spm2k+YyPLd77Zll1xPj0WFF/Vj/9xE/KqUfX79MLe3j//49GfT/e+lV3e1i8bGVvT7p/Znxw0Mtrc9fn0n/+OD+5WV99/od0KdR5z+fXn9fOftn4+fvFePD4TXq9pFQ3K79vVvgdWvxNui7P1W77OXj7n9nXe3Xt3m0W0f33f3v/N9T2Ql9fepnUuzXnqX/zSJ9f+itm8vooxdrP9fWXPj4qJtvH0Lt62OJr21/t2d/+8duVwqfE+5Xzz/0Pz3hldmE8uHhH6e+dLf3T/qf9E+78fPT0e5jq0/v/L/vFmpd9MptO7z2+/0C1sLdaT19o4lz9e1a0r6r3S3gD+yPcv1+vKQ+bs4PU/7/8nefq/11Qv3o+J9aq21T7LaU9i4faJc1w0W5rcVqM02P8zH54I7Rtw6l5X42xE7tNVlf/qj9OFT6deX7ef2h9vP4Se2/RFdPt3wLxV/lw1+qD8WPg/Txb+M/09X0x3T5/9P/oI9rv6a19HNHPp3fz2l7/5U+qH9+L/3Sg8mN60/t3x8/5J0+Z4TyaXr8+1O5f/4h5D7dHD5fF5q20e9kD+3d7f/3Y/pWZ+rdanH7l2tG1y7+l7vf7X8+3c1Vnz3C4f8QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD4D3j9B0Kd2XwOIIlOAAAAAElFTkSuQmCC",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "categories": ["productivity", "utilities"],
+  "shortcuts": [
+    {
+      "name": "Сегодня",
+      "short_name": "Сегодня",
+      "description": "Перейти к сегодняшнему дню",
+      "url": "/?today",
+      "icons": [{
+        "src": "data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22><path fill=%22black%22 d=%22M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z%22/></svg>",
+        "sizes": "192x192"
+      }]
+    }
+  ]
 }
