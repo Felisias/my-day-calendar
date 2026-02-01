@@ -8,11 +8,9 @@ class PersonalCalendar {
         this.isResizing = false;
         this.resizeEdge = null;
         this.longPressTimer = null;
-        this.longPressStart = null;
+        this.touchStart = null;
         this.isCreatingEvent = false;
         this.previewEvent = null;
-        this.touchStartX = 0;
-        this.touchStartY = 0;
         
         // Цвета Google Calendar
         this.colors = [
@@ -29,22 +27,26 @@ class PersonalCalendar {
         
         this.selectedColor = this.colors[0];
         
+        // Инициализация
         this.init();
     }
     
     init() {
         this.cacheElements();
-        this.setupEventListeners();
         this.generateTimeGrid();
         this.generateColorPicker();
         this.updateDisplay();
-        this.updateCurrentTimeLine();
         this.loadEvents();
         
-        // Обновляем текущее время каждую минуту
+        // Инициализация событий
+        this.setupEventListeners();
+        
+        // Обновление времени
+        this.updateCurrentTime();
+        this.updateCurrentTimeLine();
         setInterval(() => {
-            this.updateCurrentTimeLine();
             this.updateCurrentTime();
+            this.updateCurrentTimeLine();
         }, 60000);
     }
     
@@ -52,7 +54,6 @@ class PersonalCalendar {
         // Основные элементы
         this.dayGrid = document.getElementById('day-grid');
         this.eventsContainer = document.getElementById('events-container');
-        this.swipeContainer = document.getElementById('swipe-container');
         this.currentDateElement = document.getElementById('current-date');
         this.currentTimeElement = document.getElementById('current-time');
         this.currentTimeLine = document.getElementById('current-time-line');
@@ -77,26 +78,39 @@ class PersonalCalendar {
         // Кнопки
         this.addEventFab = document.getElementById('add-event-fab');
         this.todayBtn = document.getElementById('today-btn');
-        this.menuBtn = document.getElementById('menu-btn');
     }
     
     setupEventListeners() {
-        // Long press для создания события
-        this.dayGrid.addEventListener('mousedown', this.handleLongPressStart.bind(this));
-        this.dayGrid.addEventListener('touchstart', this.handleLongPressStart.bind(this));
-        this.dayGrid.addEventListener('mouseup', this.handleLongPressEnd.bind(this));
-        this.dayGrid.addEventListener('touchend', this.handleLongPressEnd.bind(this));
-        this.dayGrid.addEventListener('mousemove', this.handleMouseMove.bind(this));
-        this.dayGrid.addEventListener('touchmove', this.handleTouchMove.bind(this));
+        // Простые клики вместо сложных жестов для GitHub Pages
+        this.dayGrid.addEventListener('click', (e) => {
+            if (e.target.closest('.event')) return;
+            if (this.isCreatingEvent) return;
+            
+            const rect = this.dayGrid.getBoundingClientRect();
+            const y = e.clientY - rect.top;
+            this.handleGridClick(y);
+        });
         
-        // Swipe для переключения дней
-        this.swipeContainer.addEventListener('touchstart', this.handleSwipeStart.bind(this));
-        this.swipeContainer.addEventListener('touchend', this.handleSwipeEnd.bind(this));
+        // Тач события для мобильных
+        this.dayGrid.addEventListener('touchend', (e) => {
+            if (e.target.closest('.event')) return;
+            if (this.isCreatingEvent) return;
+            
+            e.preventDefault();
+            const rect = this.dayGrid.getBoundingClientRect();
+            const y = e.changedTouches[0].clientY - rect.top;
+            this.handleGridClick(y);
+        });
         
-        // Кнопки
-        this.addEventFab.addEventListener('click', () => this.showCreateEventSheet());
-        this.todayBtn.addEventListener('click', () => this.goToToday());
-        this.menuBtn.addEventListener('click', () => this.showMenu());
+        // Кнопка добавления
+        this.addEventFab.addEventListener('click', () => {
+            this.showCreateEventSheet();
+        });
+        
+        // Кнопка "Сегодня"
+        this.todayBtn.addEventListener('click', () => {
+            this.goToToday();
+        });
         
         // Sheet события
         this.sheetClose.addEventListener('click', () => this.closeSheet());
@@ -104,37 +118,71 @@ class PersonalCalendar {
         this.saveEventBtn.addEventListener('click', () => this.saveEvent());
         this.deleteEventBtn.addEventListener('click', () => this.deleteEvent());
         
-        // Автоматическое расширение sheet при фокусе на названии
+        // Автофокус на названии
         this.eventTitleInput.addEventListener('focus', () => {
-            if (this.sheet.classList.contains('open') && !this.expandedContent.style.display) {
+            if (this.sheet.classList.contains('open')) {
                 this.expandSheet();
             }
         });
         
-        // Drag & Drop для sheet handle
-        const sheetHandle = this.sheet.querySelector('.sheet-handle');
-        sheetHandle.addEventListener('mousedown', this.startSheetDrag.bind(this));
-        sheetHandle.addEventListener('touchstart', this.startSheetDrag.bind(this));
-        
-        // Обновление времени при изменении
+        // Валидация времени
         this.eventStartTime.addEventListener('change', () => this.validateEventTimes());
         this.eventEndTime.addEventListener('change', () => this.validateEventTimes());
         
-        // Загрузка/сохранение при закрытии
-        window.addEventListener('beforeunload', () => this.saveEvents());
+        // Swipe для дней
+        let touchStartX = 0;
+        let touchStartY = 0;
         
-        // Service Worker регистрация
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('sw.js')
-                    .then(registration => {
-                        console.log('SW registered:', registration);
-                    })
-                    .catch(error => {
-                        console.log('SW registration failed:', error);
-                    });
-            });
-        }
+        document.addEventListener('touchstart', (e) => {
+            touchStartX = e.touches[0].clientX;
+            touchStartY = e.touches[0].clientY;
+        });
+        
+        document.addEventListener('touchend', (e) => {
+            if (!touchStartX) return;
+            
+            const touchEndX = e.changedTouches[0].clientX;
+            const touchEndY = e.changedTouches[0].clientY;
+            
+            const deltaX = touchEndX - touchStartX;
+            const deltaY = touchEndY - touchStartY;
+            
+            // Горизонтальный свайп
+            if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 50) {
+                if (deltaX > 0) {
+                    this.previousDay();
+                } else {
+                    this.nextDay();
+                }
+            }
+            
+            touchStartX = 0;
+            touchStartY = 0;
+        });
+        
+        // Клавиши для навигации
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowLeft') {
+                this.previousDay();
+            } else if (e.key === 'ArrowRight') {
+                this.nextDay();
+            } else if (e.key === 't' || e.key === 'T') {
+                this.goToToday();
+            } else if (e.key === 'Escape' && this.sheet.classList.contains('open')) {
+                this.closeSheet();
+            }
+        });
+    }
+    
+    handleGridClick(y) {
+        const gridHeight = this.dayGrid.offsetHeight;
+        const startMinutes = Math.round((y / gridHeight) * 1440 / 15) * 15;
+        const endMinutes = startMinutes + 60;
+        
+        this.showCreateEventSheet(
+            this.minutesToTime(startMinutes),
+            this.minutesToTime(endMinutes)
+        );
     }
     
     generateTimeGrid() {
@@ -143,16 +191,36 @@ class PersonalCalendar {
         for (let hour = 0; hour < 24; hour++) {
             const timeSlot = document.createElement('div');
             timeSlot.className = 'time-slot';
+            timeSlot.style.height = '60px';
             
             const timeLabel = document.createElement('div');
             timeLabel.className = 'time-label';
             timeLabel.textContent = `${hour.toString().padStart(2, '0')}:00`;
+            timeLabel.style.position = 'absolute';
+            timeLabel.style.top = '-10px';
+            timeLabel.style.left = '8px';
+            timeLabel.style.fontSize = '12px';
+            timeLabel.style.color = '#70757a';
+            timeLabel.style.width = '40px';
+            timeLabel.style.textAlign = 'right';
             
             const hourLine = document.createElement('div');
             hourLine.className = 'hour-line';
+            hourLine.style.position = 'absolute';
+            hourLine.style.left = '56px';
+            hourLine.style.right = '0';
+            hourLine.style.height = '1px';
+            hourLine.style.background = '#dadce0';
+            hourLine.style.top = '0';
             
             const halfHourLine = document.createElement('div');
             halfHourLine.className = 'half-hour-line';
+            halfHourLine.style.position = 'absolute';
+            halfHourLine.style.left = '56px';
+            halfHourLine.style.right = '0';
+            halfHourLine.style.height = '1px';
+            halfHourLine.style.background = '#e8eaed';
+            halfHourLine.style.top = '30px';
             
             timeSlot.appendChild(timeLabel);
             timeSlot.appendChild(hourLine);
@@ -169,19 +237,30 @@ class PersonalCalendar {
         this.colors.forEach(color => {
             const colorOption = document.createElement('div');
             colorOption.className = 'color-option';
-            colorOption.style.backgroundColor = color.value;
+            colorOption.style.cssText = `
+                width: 36px;
+                height: 36px;
+                border-radius: 50%;
+                cursor: pointer;
+                border: 2px solid transparent;
+                background-color: ${color.value};
+                transition: transform 0.2s;
+            `;
             colorOption.dataset.colorId = color.id;
             colorOption.title = color.name;
             
             if (color.id === this.selectedColor.id) {
-                colorOption.classList.add('selected');
+                colorOption.style.borderColor = '#202124';
+                colorOption.style.transform = 'scale(1.1)';
             }
             
             colorOption.addEventListener('click', () => {
                 document.querySelectorAll('.color-option').forEach(opt => {
-                    opt.classList.remove('selected');
+                    opt.style.borderColor = 'transparent';
+                    opt.style.transform = 'scale(1)';
                 });
-                colorOption.classList.add('selected');
+                colorOption.style.borderColor = '#202124';
+                colorOption.style.transform = 'scale(1.1)';
                 this.selectedColor = color;
             });
             
@@ -190,7 +269,6 @@ class PersonalCalendar {
     }
     
     updateDisplay() {
-        const options = { weekday: 'short', month: 'short', day: 'numeric' };
         const dateStr = this.currentDate.toLocaleDateString('ru-RU', {
             weekday: 'short',
             month: 'numeric',
@@ -198,7 +276,6 @@ class PersonalCalendar {
         }).replace(',', '');
         
         this.currentDateElement.textContent = dateStr.charAt(0).toUpperCase() + dateStr.slice(1);
-        this.updateCurrentTime();
     }
     
     updateCurrentTime() {
@@ -215,110 +292,15 @@ class PersonalCalendar {
         const minutesSinceMidnight = now.getHours() * 60 + now.getMinutes();
         const topPosition = (minutesSinceMidnight / 1440) * 100;
         
-        this.currentTimeLine.style.top = `${topPosition}%`;
-        
         // Показываем только если текущий день
         const isToday = now.toDateString() === this.currentDate.toDateString();
-        this.currentTimeLine.style.display = isToday ? 'block' : 'none';
-    }
-    
-    handleLongPressStart(e) {
-        if (e.target.closest('.event')) return;
         
-        const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
-        const rect = this.dayGrid.getBoundingClientRect();
-        const y = clientY - rect.top;
-        
-        this.longPressStart = {
-            x: e.type.includes('touch') ? e.touches[0].clientX : e.clientX,
-            y: clientY,
-            gridY: y
-        };
-        
-        this.longPressTimer = setTimeout(() => {
-            this.startCreatingEvent(y);
-        }, 500);
-    }
-    
-    handleLongPressEnd(e) {
-        clearTimeout(this.longPressTimer);
-        
-        if (this.isCreatingEvent && this.previewEvent && this.longPressStart) {
-            const clientX = e.type.includes('touch') ? e.changedTouches[0].clientX : e.clientX;
-            const clientY = e.type.includes('touch') ? e.changedTouches[0].clientY : e.clientY;
-            
-            // Проверяем, был ли это drag (смещение больше 10px)
-            const deltaX = Math.abs(clientX - this.longPressStart.x);
-            const deltaY = Math.abs(clientY - this.longPressStart.y);
-            
-            if (deltaX < 10 && deltaY < 10) {
-                this.showCreateEventSheet(this.previewEvent.startTime, this.previewEvent.endTime);
-            }
+        if (isToday) {
+            this.currentTimeLine.style.top = `${topPosition}%`;
+            this.currentTimeLine.style.display = 'block';
+        } else {
+            this.currentTimeLine.style.display = 'none';
         }
-        
-        this.isCreatingEvent = false;
-        this.previewEvent = null;
-        this.eventPreview.classList.remove('visible');
-    }
-    
-    handleMouseMove(e) {
-        if (!this.longPressStart || !this.isCreatingEvent) return;
-        
-        const rect = this.dayGrid.getBoundingClientRect();
-        const y = e.clientY - rect.top;
-        this.updateEventPreview(this.longPressStart.gridY, y);
-    }
-    
-    handleTouchMove(e) {
-        if (!this.longPressStart || !this.isCreatingEvent) return;
-        e.preventDefault();
-        
-        const rect = this.dayGrid.getBoundingClientRect();
-        const y = e.touches[0].clientY - rect.top;
-        this.updateEventPreview(this.longPressStart.gridY, y);
-    }
-    
-    startCreatingEvent(startY) {
-        this.isCreatingEvent = true;
-        
-        const gridHeight = this.dayGrid.offsetHeight;
-        const startMinutes = Math.round((startY / gridHeight) * 1440 / 15) * 15;
-        const endMinutes = startMinutes + 60; // 1 час по умолчанию
-        
-        this.previewEvent = {
-            startTime: this.minutesToTime(startMinutes),
-            endTime: this.minutesToTime(endMinutes),
-            startMinutes: startMinutes,
-            endMinutes: endMinutes
-        };
-        
-        this.showEventPreview(startMinutes, endMinutes);
-    }
-    
-    updateEventPreview(startY, currentY) {
-        if (!this.previewEvent) return;
-        
-        const gridHeight = this.dayGrid.offsetHeight;
-        const endMinutes = Math.round((currentY / gridHeight) * 1440 / 15) * 15;
-        
-        // Минимальная длительность 15 минут
-        if (Math.abs(endMinutes - this.previewEvent.startMinutes) < 15) {
-            return;
-        }
-        
-        this.previewEvent.endMinutes = endMinutes;
-        this.previewEvent.endTime = this.minutesToTime(endMinutes);
-        
-        this.showEventPreview(this.previewEvent.startMinutes, endMinutes);
-    }
-    
-    showEventPreview(startMinutes, endMinutes) {
-        const top = (startMinutes / 1440) * 100;
-        const height = ((endMinutes - startMinutes) / 1440) * 100;
-        
-        this.eventPreview.style.top = `${top}%`;
-        this.eventPreview.style.height = `${height}%`;
-        this.eventPreview.classList.add('visible');
     }
     
     showCreateEventSheet(startTime = '09:00', endTime = '10:00') {
@@ -340,7 +322,7 @@ class PersonalCalendar {
         // Фокусируемся на названии
         setTimeout(() => {
             this.eventTitleInput.focus();
-        }, 300);
+        }, 100);
     }
     
     showEditEventSheet(eventId) {
@@ -414,7 +396,7 @@ class PersonalCalendar {
             this.events.push(eventData);
         }
         
-        this.saveEvents();
+        localStorage.setItem('calendarEvents', JSON.stringify(this.events));
         this.loadEvents();
         this.closeSheet();
     }
@@ -422,7 +404,7 @@ class PersonalCalendar {
     deleteEvent() {
         if (this.editingEventId && confirm('Удалить это событие?')) {
             this.events = this.events.filter(e => e.id !== this.editingEventId);
-            this.saveEvents();
+            localStorage.setItem('calendarEvents', JSON.stringify(this.events));
             this.loadEvents();
             this.closeSheet();
         }
@@ -457,6 +439,8 @@ class PersonalCalendar {
     }
     
     groupOverlappingEvents(events) {
+        if (events.length === 0) return [];
+        
         const groups = [];
         let currentGroup = [];
         let lastEnd = -1;
@@ -497,30 +481,253 @@ class PersonalCalendar {
         
         // Позиционирование для пересекающихся событий
         const left = 8 + (indexInGroup * 4);
-        const width = groupSize > 1 ? `calc(100% - ${(groupSize * 4) + 4}px)` : 'calc(100% - 16px)';
+        const rightOffset = (groupSize - indexInGroup - 1) * 4 + 8;
         
-        eventElement.style.top = `${top}%`;
-        eventElement.style.height = `${height}%`;
-        eventElement.style.left = `${left}px`;
-        eventElement.style.width = width;
-        
-        const color = this.colors.find(c => c.id === event.colorId) || this.colors[0];
-        eventElement.style.backgroundColor = color.value;
+        eventElement.style.cssText = `
+            position: absolute;
+            top: ${top}%;
+            height: ${height}%;
+            left: ${left}px;
+            right: ${rightOffset}px;
+            border-radius: 4px;
+            padding: 8px;
+            overflow: hidden;
+            cursor: pointer;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            transition: box-shadow 0.2s, transform 0.1s;
+            background-color: ${this.colors.find(c => c.id === event.colorId)?.value || '#1a73e8'};
+            color: white;
+            z-index: 10;
+        `;
         
         const content = document.createElement('div');
         content.className = 'event-content';
         content.innerHTML = `
-            <div class="event-title">${this.escapeHtml(event.title)}</div>
-            <div class="event-time">${event.startTime} - ${event.endTime}</div>
+            <div class="event-title" style="font-size: 14px; font-weight: 500; line-height: 1.3;">${this.escapeHtml(event.title)}</div>
+            <div class="event-time" style="font-size: 12px; opacity: 0.9; margin-top: 2px;">${event.startTime} - ${event.endTime}</div>
         `;
         
-        // Ручки для resize
+        // Drag ручки
         const topHandle = document.createElement('div');
         topHandle.className = 'event-resize-handle top';
-        topHandle.dataset.edge = 'top';
+        topHandle.style.cssText = `
+            position: absolute;
+            left: 0;
+            right: 0;
+            height: 6px;
+            cursor: ns-resize;
+            z-index: 2;
+            top: 0;
+        `;
         
         const bottomHandle = document.createElement('div');
         bottomHandle.className = 'event-resize-handle bottom';
-        bottomHandle.dataset.edge = 'bottom';
+        bottomHandle.style.cssText = `
+            position: absolute;
+            left: 0;
+            right: 0;
+            height: 6px;
+            cursor: ns-resize;
+            z-index: 2;
+            bottom: 0;
+        `;
         
-        eventEle
+        eventElement.appendChild(content);
+        eventElement.appendChild(topHandle);
+        eventElement.appendChild(bottomHandle);
+        
+        // Клик для редактирования
+        eventElement.addEventListener('click', (e) => {
+            if (e.target.closest('.event-resize-handle')) return;
+            this.showEditEventSheet(event.id);
+        });
+        
+        // Простой drag & drop
+        let isDragging = false;
+        let startY = 0;
+        let startTop = 0;
+        
+        eventElement.addEventListener('mousedown', (e) => {
+            if (e.target.closest('.event-resize-handle')) {
+                this.startResize(e, eventElement, event);
+                return;
+            }
+            
+            isDragging = true;
+            startY = e.clientY;
+            startTop = top;
+            eventElement.style.opacity = '0.8';
+            eventElement.style.zIndex = '1000';
+            eventElement.style.boxShadow = '0 4px 12px rgba(0,0,0,0.2)';
+            
+            const onMouseMove = (moveEvent) => {
+                if (!isDragging) return;
+                
+                const deltaY = moveEvent.clientY - startY;
+                const gridHeight = this.dayGrid.offsetHeight;
+                const deltaMinutes = (deltaY / gridHeight) * 1440;
+                const newTopMinutes = (startTop / 100) * 1440 + deltaMinutes;
+                const snappedMinutes = Math.round(newTopMinutes / 15) * 15;
+                
+                const duration = this.timeToMinutes(event.endTime) - this.timeToMinutes(event.startTime);
+                const newStartTime = this.minutesToTime(Math.max(0, Math.min(1440 - duration, snappedMinutes)));
+                const newEndTime = this.minutesToTime(this.timeToMinutes(newStartTime) + duration);
+                
+                eventElement.style.top = `${(snappedMinutes / 1440) * 100}%`;
+                event.startTime = newStartTime;
+                event.endTime = newEndTime;
+                
+                const timeElement = eventElement.querySelector('.event-time');
+                if (timeElement) {
+                    timeElement.textContent = `${newStartTime} - ${newEndTime}`;
+                }
+            };
+            
+            const onMouseUp = () => {
+                isDragging = false;
+                eventElement.style.opacity = '1';
+                eventElement.style.zIndex = '10';
+                eventElement.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
+                
+                localStorage.setItem('calendarEvents', JSON.stringify(this.events));
+                
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
+            };
+            
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+        });
+        
+        // Resize
+        topHandle.addEventListener('mousedown', (e) => this.startResize(e, eventElement, event, 'top'));
+        bottomHandle.addEventListener('mousedown', (e) => this.startResize(e, eventElement, event, 'bottom'));
+        
+        this.eventsContainer.appendChild(eventElement);
+    }
+    
+    startResize(e, eventElement, event, edge = 'top') {
+        e.stopPropagation();
+        
+        const startY = e.clientY;
+        const startHeight = parseFloat(eventElement.style.height);
+        const startTop = parseFloat(eventElement.style.top);
+        
+        const onMouseMove = (moveEvent) => {
+            const deltaY = moveEvent.clientY - startY;
+            const gridHeight = this.dayGrid.offsetHeight;
+            const deltaMinutes = (deltaY / gridHeight) * 1440;
+            const snappedDeltaMinutes = Math.round(deltaMinutes / 15) * 15;
+            
+            const startMinutes = this.timeToMinutes(event.startTime);
+            const endMinutes = this.timeToMinutes(event.endTime);
+            
+            let newStartMinutes = startMinutes;
+            let newEndMinutes = endMinutes;
+            let newHeight = startHeight;
+            let newTop = startTop;
+            
+            if (edge === 'top') {
+                newStartMinutes = Math.max(0, Math.min(endMinutes - 15, startMinutes + snappedDeltaMinutes));
+                newHeight = ((endMinutes - newStartMinutes) / 1440) * 100;
+                newTop = (newStartMinutes / 1440) * 100;
+                
+                eventElement.style.top = `${newTop}%`;
+                eventElement.style.height = `${newHeight}%`;
+                
+                event.startTime = this.minutesToTime(newStartMinutes);
+            } else {
+                newEndMinutes = Math.min(1440, Math.max(startMinutes + 15, endMinutes + snappedDeltaMinutes));
+                newHeight = ((newEndMinutes - startMinutes) / 1440) * 100;
+                
+                eventElement.style.height = `${newHeight}%`;
+                
+                event.endTime = this.minutesToTime(newEndMinutes);
+            }
+            
+            const timeElement = eventElement.querySelector('.event-time');
+            if (timeElement) {
+                timeElement.textContent = `${event.startTime} - ${event.endTime}`;
+            }
+        };
+        
+        const onMouseUp = () => {
+            localStorage.setItem('calendarEvents', JSON.stringify(this.events));
+            
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+        };
+        
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+    }
+    
+    previousDay() {
+        this.currentDate.setDate(this.currentDate.getDate() - 1);
+        this.updateDisplay();
+        this.loadEvents();
+        this.updateCurrentTimeLine();
+    }
+    
+    nextDay() {
+        this.currentDate.setDate(this.currentDate.getDate() + 1);
+        this.updateDisplay();
+        this.loadEvents();
+        this.updateCurrentTimeLine();
+    }
+    
+    goToToday() {
+        this.currentDate = new Date();
+        this.updateDisplay();
+        this.loadEvents();
+        this.updateCurrentTimeLine();
+    }
+    
+    // Вспомогательные методы
+    timeToMinutes(timeStr) {
+        const [hours, minutes] = timeStr.split(':').map(Number);
+        return hours * 60 + minutes;
+    }
+    
+    minutesToTime(minutes) {
+        const hrs = Math.floor(minutes / 60);
+        const mins = minutes % 60;
+        return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
+    }
+    
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+}
+
+// Инициализация при загрузке страницы
+document.addEventListener('DOMContentLoaded', () => {
+    // Удаляем Service Worker регистрацию для GitHub Pages
+    if ('serviceWorker' in navigator && window.location.protocol === 'https:') {
+        navigator.serviceWorker.register('sw.js')
+            .catch(err => console.log('Service Worker не зарегистрирован:', err));
+    }
+    
+    // Запускаем приложение
+    window.calendarApp = new PersonalCalendar();
+    
+    // Простая PWA инсталляция
+    let deferredPrompt;
+    
+    window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+        
+        // Показываем кнопку установки
+        setTimeout(() => {
+            if (confirm('Хотите установить приложение на устройство?')) {
+                deferredPrompt.prompt();
+                deferredPrompt.userChoice.then(() => {
+                    deferredPrompt = null;
+                });
+            }
+        }, 3000);
+    });
+});
