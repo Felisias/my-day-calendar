@@ -14,7 +14,7 @@ body, html {
 }
 
 body {
-    font-family: 'Roboto', 'Segoe UI', Arial, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     background: #fff;
     color: #202124;
     -webkit-font-smoothing: antialiased;
@@ -103,16 +103,37 @@ body {
     left: 0;
     width: 100%;
     height: 100%;
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94);
     will-change: transform;
+    z-index: 1;
+}
+
+.day-wrapper.current {
+    z-index: 2;
+}
+
+.day-wrapper.prev {
+    transform: translateX(-100%);
+    z-index: 1;
+}
+
+.day-wrapper.next {
+    transform: translateX(100%);
+    z-index: 1;
 }
 
 .day-scroll {
     width: 100%;
     height: 100%;
-    overflow-y: auto;
+    overflow-y: scroll;
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.day-scroll::-webkit-scrollbar {
+    display: none;
 }
 
 /* Сетка дня */
@@ -164,8 +185,10 @@ body {
     right: 0;
     min-height: 1440px;
     pointer-events: none;
+    z-index: 10;
 }
 
+/* Реальное событие */
 .event {
     position: absolute;
     left: 8px;
@@ -176,10 +199,10 @@ body {
     cursor: pointer;
     pointer-events: auto;
     box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    transition: transform 0.2s, box-shadow 0.2s;
+    transition: transform 0.15s, box-shadow 0.15s;
     user-select: none;
     -webkit-user-select: none;
-    z-index: 10;
+    z-index: 11;
     border-left: 4px solid rgba(255,255,255,0.3);
 }
 
@@ -188,7 +211,7 @@ body {
 }
 
 .event.dragging {
-    opacity: 0.9;
+    opacity: 0.85;
     z-index: 1000;
     box-shadow: 0 8px 25px rgba(0,0,0,0.2);
 }
@@ -211,9 +234,16 @@ body {
     position: absolute;
     left: 0;
     right: 0;
-    height: 12px;
+    height: 16px;
     cursor: ns-resize;
-    z-index: 2;
+    z-index: 12;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.event:hover .event-resize-handle,
+.event.editing .event-resize-handle {
+    opacity: 1;
 }
 
 .event-resize-handle.top {
@@ -224,34 +254,89 @@ body {
     bottom: 0;
 }
 
-/* Точка притяжения для sheet */
-.sheet-docking-zone {
+.event-resize-handle::after {
+    content: '';
     position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    height: 60px;
-    background: linear-gradient(to bottom, transparent, rgba(26, 115, 232, 0.1));
-    border-top: 2px dashed rgba(26, 115, 232, 0.3);
-    border-radius: 12px 12px 0 0;
-    opacity: 0;
-    transition: opacity 0.3s;
-    pointer-events: none;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 40px;
+    height: 4px;
+    background: rgba(255,255,255,0.6);
+    border-radius: 2px;
 }
 
-.sheet-docking-zone.active {
+.event-resize-handle.top::after {
+    top: 4px;
+}
+
+.event-resize-handle.bottom::after {
+    bottom: 4px;
+}
+
+/* Preview события при создании */
+.event-preview {
+    position: absolute;
+    left: 64px;
+    right: 8px;
+    border: 2px solid #1a73e8;
+    border-radius: 8px;
+    background: rgba(26, 115, 232, 0.08);
+    pointer-events: auto;
+    z-index: 1000;
+    opacity: 0;
+    transition: opacity 0.2s;
+    box-shadow: 0 4px 12px rgba(26, 115, 232, 0.15);
+}
+
+.event-preview.visible {
     opacity: 1;
 }
 
-/* Линия текущего времени */
-.current-time-line {
+.preview-resize-handle {
     position: absolute;
+    left: 0;
+    right: 0;
+    height: 24px;
+    cursor: ns-resize;
+    z-index: 1001;
+}
+
+.preview-resize-handle.top {
+    top: -12px;
+}
+
+.preview-resize-handle.bottom {
+    bottom: -12px;
+}
+
+.preview-resize-handle::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 60px;
+    height: 6px;
+    background: #1a73e8;
+    border-radius: 3px;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+}
+
+.preview-resize-handle:hover::after,
+.preview-resize-handle:active::after {
+    opacity: 1;
+}
+
+/* Линия текущего времени - FIXED позиция */
+.current-time-line {
+    position: fixed;
     left: 56px;
     right: 0;
     height: 2px;
     background: #ea4335;
     z-index: 50;
     pointer-events: none;
+    transition: top 0.1s linear;
 }
 
 .current-time-line::before {
@@ -295,6 +380,43 @@ body {
     font-size: 24px;
 }
 
+/* Индикаторы свайпа */
+.swipe-indicator {
+    position: fixed;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: rgba(26, 115, 232, 0.9);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+    opacity: 0;
+    transition: opacity 0.3s, transform 0.3s;
+    pointer-events: none;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+}
+
+.swipe-indicator.left {
+    left: 10px;
+}
+
+.swipe-indicator.right {
+    right: 10px;
+}
+
+.swipe-indicator.visible {
+    opacity: 1;
+    transform: translateY(-50%) scale(1.1);
+}
+
+.swipe-indicator .material-icons {
+    font-size: 24px;
+}
+
 /* Sheet панель */
 .sheet {
     position: fixed;
@@ -330,6 +452,7 @@ body {
     border-radius: 2px;
     margin: 12px auto;
     cursor: ns-resize;
+    flex-shrink: 0;
 }
 
 .sheet-content {
@@ -337,6 +460,7 @@ body {
     overflow-y: auto;
     flex: 1;
     -webkit-overflow-scrolling: touch;
+    padding-bottom: env(safe-area-inset-bottom, 24px);
 }
 
 .sheet-header {
@@ -344,6 +468,7 @@ body {
     align-items: center;
     justify-content: space-between;
     margin-bottom: 20px;
+    flex-shrink: 0;
 }
 
 .sheet-header h2 {
@@ -384,6 +509,7 @@ body {
     color: #202124;
     border-bottom: 2px solid transparent;
     background: transparent;
+    font-family: inherit;
 }
 
 .event-title-input:focus {
@@ -409,6 +535,7 @@ body {
     font-size: 16px;
     outline: none;
     background: white;
+    font-family: inherit;
 }
 
 .time-inputs input:focus {
@@ -453,6 +580,7 @@ body {
     outline: none;
     color: #202124;
     cursor: pointer;
+    font-family: inherit;
 }
 
 .repeat-select:focus {
@@ -500,6 +628,7 @@ body {
     gap: 8px;
     transition: background-color 0.2s, transform 0.1s;
     user-select: none;
+    font-family: inherit;
 }
 
 .btn:active {
@@ -543,24 +672,44 @@ body {
     visibility: visible;
 }
 
+/* Точка притяжения для sheet */
+.sheet-docking-zone {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 80px;
+    background: linear-gradient(to bottom, transparent, rgba(26, 115, 232, 0.05));
+    border-top: 2px dashed rgba(26, 115, 232, 0.2);
+    border-radius: 12px 12px 0 0;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+    z-index: 5;
+}
+
+.sheet-docking-zone.active {
+    opacity: 1;
+}
+
 /* Анимации */
 @keyframes slideIn {
     from { transform: translateY(20px); opacity: 0; }
     to { transform: translateY(0); opacity: 1; }
 }
 
-@keyframes slideOut {
-    from { transform: translateX(0); opacity: 1; }
-    to { transform: translateX(-100%); opacity: 0; }
-}
-
-@keyframes slideInFromRight {
-    from { transform: translateX(100%); opacity: 0; }
-    to { transform: translateX(0); opacity: 1; }
-}
-
 .slide-in {
     animation: slideIn 0.3s ease;
+}
+
+/* Адаптация под клавиатуру */
+.keyboard-open .sheet {
+    max-height: 100vh;
+    border-radius: 0;
+}
+
+.keyboard-open .sheet-content {
+    padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
 }
 
 /* Медиа-запросы для разных экранов */
@@ -575,6 +724,15 @@ body {
     
     .time-separator {
         display: none;
+    }
+    
+    .event-resize-handle {
+        height: 24px;
+    }
+    
+    .event-resize-handle::after {
+        width: 60px;
+        height: 5px;
     }
 }
 
@@ -637,34 +795,36 @@ body {
         color: #e8eaed;
     }
     
+    .event-preview {
+        border-color: #8ab4f8;
+        background: rgba(138, 180, 248, 0.08);
+        box-shadow: 0 4px 12px rgba(138, 180, 248, 0.15);
+    }
+    
+    .preview-resize-handle::after {
+        background: #8ab4f8;
+    }
+    
     .sheet-docking-zone {
-        background: linear-gradient(to bottom, transparent, rgba(138, 180, 248, 0.1));
-        border-top-color: rgba(138, 180, 248, 0.3);
+        background: linear-gradient(to bottom, transparent, rgba(138, 180, 248, 0.05));
+        border-top-color: rgba(138, 180, 248, 0.2);
     }
 }
 
-/* Оптимизация скролла */
-.day-scroll {
-    scrollbar-width: none; /* Firefox */
-    -ms-overflow-style: none; /* IE and Edge */
-}
-
-.day-scroll::-webkit-scrollbar {
-    display: none; /* Chrome, Safari, Opera */
-}
-
-/* Индикатор создания события */
-.create-event-indicator {
-    position: absolute;
-    background: rgba(26, 115, 232, 0.1);
-    border: 2px solid #1a73e8;
-    border-radius: 8px;
-    z-index: 500;
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity 0.2s;
-}
-
-.create-event-indicator.visible {
-    opacity: 1;
+/* Безопасные зоны для iPhone X и новее */
+@supports (padding: max(0px)) {
+    .app-header,
+    .sheet-content {
+        padding-left: max(16px, env(safe-area-inset-left));
+        padding-right: max(16px, env(safe-area-inset-right));
+    }
+    
+    .app-header {
+        padding-top: max(12px, env(safe-area-inset-top));
+    }
+    
+    .fab {
+        bottom: max(24px, env(safe-area-inset-bottom));
+        right: max(24px, env(safe-area-inset-right));
+    }
 }
