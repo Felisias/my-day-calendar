@@ -5,7 +5,7 @@
 <meta name="viewport"
 content="width=device-width,initial-scale=1,viewport-fit=cover">
 
-<title>My Day Calendar</title>
+<title>My Calendar</title>
 
 <link rel="manifest" href="manifest.json">
 <link rel="stylesheet" href="styles.css">
@@ -15,36 +15,26 @@ content="width=device-width,initial-scale=1,viewport-fit=cover">
 <body>
 
 <header class="topbar">
-  <div class="dow" id="dow"></div>
-  <div class="date" id="date"></div>
+  <div id="dow"></div>
+  <div id="date"></div>
 </header>
 
-<div id="dayContainer">
-  <div id="dayGrid"></div>
+<div id="dayViewport">
+  <div id="daySlider"></div>
 </div>
 
-<!-- bottom sheet -->
+<!-- sheet -->
 <div id="sheet" class="sheet hidden">
-  <div id="sheetHandle" class="sheet-handle"></div>
+  <div class="sheet-handle"></div>
 
-  <div class="sheet-header">
+  <div class="sheet-row">
     <input id="titleInput" placeholder="Название события">
-    <button id="closeSheet">✕</button>
+    <button id="closeBtn">✕</button>
   </div>
 
   <div id="sheetMore" class="sheet-more">
-    <label>Цвет</label>
     <div id="colorRow"></div>
-
-    <label>Повтор</label>
-    <select id="repeat">
-      <option value="none">Нет</option>
-      <option value="daily">Каждый день</option>
-      <option value="weekly">Каждую неделю</option>
-      <option value="monthly">Каждый месяц</option>
-    </select>
-
-    <button id="saveBtn" class="saveBtn">Сохранить</button>
+    <button id="saveBtn">Сохранить</button>
   </div>
 </div>
 
