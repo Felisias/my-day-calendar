@@ -1,8 +1,8 @@
 {
-  "name": "My Calendar",
-  "short_name": "Calendar",
-  "display": "standalone",
-  "start_url": ".",
-  "background_color": "#ffffff",
-  "theme_color": "#ffffff"
+ "name":"My Calendar",
+ "short_name":"Calendar",
+ "display":"standalone",
+ "start_url":".",
+ "background_color":"#ffffff",
+ "theme_color":"#ffffff"
 }
