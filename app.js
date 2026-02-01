@@ -4,13 +4,37 @@ class PersonalCalendar {
         this.currentDate = new Date();
         this.events = JSON.parse(localStorage.getItem('calendarEvents') || '[]');
         this.editingEventId = null;
-        this.isDragging = false;
-        this.isResizing = false;
-        this.resizeEdge = null;
-        this.longPressTimer = null;
-        this.touchStart = null;
-        this.isCreatingEvent = false;
-        this.previewEvent = null;
+        
+        // Состояния свайпа и скролла
+        this.swipeState = {
+            startX: 0,
+            startY: 0,
+            isSwiping: false,
+            direction: null,
+            currentDayOffset: 0
+        };
+        
+        // Состояния создания события
+        this.creationState = {
+            isCreating: false,
+            startY: 0,
+            endY: 0,
+            startTime: null,
+            endTime: null,
+            element: null
+        };
+        
+        // Состояния sheet
+        this.sheetState = {
+            isDragging: false,
+            startY: 0,
+            startHeight: 0,
+            isDocked: false
+        };
+        
+        // Дни для отображения
+        this.days = [];
+        this.currentDayIndex = 0;
         
         // Цвета Google Calendar
         this.colors = [
@@ -27,42 +51,32 @@ class PersonalCalendar {
         
         this.selectedColor = this.colors[0];
         
-        // Инициализация
         this.init();
     }
     
     init() {
         this.cacheElements();
-        this.generateTimeGrid();
-        this.generateColorPicker();
-        this.updateDisplay();
-        this.loadEvents();
-        
-        // Инициализация событий
+        this.generateDays();
         this.setupEventListeners();
-        
-        // Обновление времени
+        this.updateDisplay();
         this.updateCurrentTime();
-        this.updateCurrentTimeLine();
+        
+        // Обновление времени каждую минуту
         setInterval(() => {
             this.updateCurrentTime();
-            this.updateCurrentTimeLine();
         }, 60000);
     }
     
     cacheElements() {
         // Основные элементы
-        this.dayGrid = document.getElementById('day-grid');
-        this.eventsContainer = document.getElementById('events-container');
+        this.daysContainer = document.getElementById('days-container');
         this.currentDateElement = document.getElementById('current-date');
         this.currentTimeElement = document.getElementById('current-time');
-        this.currentTimeLine = document.getElementById('current-time-line');
         
         // Sheet элементы
         this.sheet = document.getElementById('event-sheet');
         this.sheetOverlay = document.getElementById('sheet-overlay');
         this.sheetClose = document.getElementById('sheet-close');
-        this.eventPreview = document.getElementById('event-preview');
         
         // Форма события
         this.eventTitleInput = document.getElementById('event-title');
@@ -78,39 +92,26 @@ class PersonalCalendar {
         // Кнопки
         this.addEventFab = document.getElementById('add-event-fab');
         this.todayBtn = document.getElementById('today-btn');
+        
+        // Индикаторы свайпа
+        this.swipeLeft = document.getElementById('swipe-left');
+        this.swipeRight = document.getElementById('swipe-right');
     }
     
     setupEventListeners() {
-        // Простые клики вместо сложных жестов для GitHub Pages
-        this.dayGrid.addEventListener('click', (e) => {
-            if (e.target.closest('.event')) return;
-            if (this.isCreatingEvent) return;
-            
-            const rect = this.dayGrid.getBoundingClientRect();
-            const y = e.clientY - rect.top;
-            this.handleGridClick(y);
-        });
+        // События для контейнера дней
+        this.daysContainer.addEventListener('touchstart', this.handleTouchStart.bind(this), { passive: false });
+        this.daysContainer.addEventListener('touchmove', this.handleTouchMove.bind(this), { passive: false });
+        this.daysContainer.addEventListener('touchend', this.handleTouchEnd.bind(this));
         
-        // Тач события для мобильных
-        this.dayGrid.addEventListener('touchend', (e) => {
-            if (e.target.closest('.event')) return;
-            if (this.isCreatingEvent) return;
-            
-            e.preventDefault();
-            const rect = this.dayGrid.getBoundingClientRect();
-            const y = e.changedTouches[0].clientY - rect.top;
-            this.handleGridClick(y);
-        });
+        // Мышь для десктопа
+        this.daysContainer.addEventListener('mousedown', this.handleMouseDown.bind(this));
+        document.addEventListener('mousemove', this.handleMouseMove.bind(this));
+        document.addEventListener('mouseup', this.handleMouseUp.bind(this));
         
-        // Кнопка добавления
-        this.addEventFab.addEventListener('click', () => {
-            this.showCreateEventSheet();
-        });
-        
-        // Кнопка "Сегодня"
-        this.todayBtn.addEventListener('click', () => {
-            this.goToToday();
-        });
+        // Кнопки
+        this.addEventFab.addEventListener('click', () => this.showCreateEventSheet());
+        this.todayBtn.addEventListener('click', () => this.goToToday());
         
         // Sheet события
         this.sheetClose.addEventListener('click', () => this.closeSheet());
@@ -118,9 +119,14 @@ class PersonalCalendar {
         this.saveEventBtn.addEventListener('click', () => this.saveEvent());
         this.deleteEventBtn.addEventListener('click', () => this.deleteEvent());
         
-        // Автофокус на названии
+        // Sheet drag
+        const sheetHandle = this.sheet.querySelector('.sheet-handle');
+        sheetHandle.addEventListener('touchstart', (e) => this.startSheetDrag(e));
+        sheetHandle.addEventListener('mousedown', (e) => this.startSheetDrag(e));
+        
+        // Автофокус
         this.eventTitleInput.addEventListener('focus', () => {
-            if (this.sheet.classList.contains('open')) {
+            if (this.sheet.classList.contains('open') && !this.expandedContent.style.display) {
                 this.expandSheet();
             }
         });
@@ -129,104 +135,103 @@ class PersonalCalendar {
         this.eventStartTime.addEventListener('change', () => this.validateEventTimes());
         this.eventEndTime.addEventListener('change', () => this.validateEventTimes());
         
-        // Swipe для дней
-        let touchStartX = 0;
-        let touchStartY = 0;
-        
-        document.addEventListener('touchstart', (e) => {
-            touchStartX = e.touches[0].clientX;
-            touchStartY = e.touches[0].clientY;
-        });
-        
-        document.addEventListener('touchend', (e) => {
-            if (!touchStartX) return;
-            
-            const touchEndX = e.changedTouches[0].clientX;
-            const touchEndY = e.changedTouches[0].clientY;
-            
-            const deltaX = touchEndX - touchStartX;
-            const deltaY = touchEndY - touchStartY;
-            
-            // Горизонтальный свайп
-            if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 50) {
-                if (deltaX > 0) {
-                    this.previousDay();
-                } else {
-                    this.nextDay();
-                }
-            }
-            
-            touchStartX = 0;
-            touchStartY = 0;
-        });
-        
-        // Клавиши для навигации
+        // Клавиши
         document.addEventListener('keydown', (e) => {
             if (e.key === 'ArrowLeft') {
-                this.previousDay();
+                this.navigateDays(-1);
             } else if (e.key === 'ArrowRight') {
-                this.nextDay();
+                this.navigateDays(1);
             } else if (e.key === 't' || e.key === 'T') {
                 this.goToToday();
-            } else if (e.key === 'Escape' && this.sheet.classList.contains('open')) {
+            } else if (e.key === 'Escape') {
                 this.closeSheet();
             }
         });
     }
     
-    handleGridClick(y) {
-        const gridHeight = this.dayGrid.offsetHeight;
-        const startMinutes = Math.round((y / gridHeight) * 1440 / 15) * 15;
-        const endMinutes = startMinutes + 60;
+    generateDays() {
+        this.daysContainer.innerHTML = '';
+        this.days = [];
         
-        this.showCreateEventSheet(
-            this.minutesToTime(startMinutes),
-            this.minutesToTime(endMinutes)
-        );
+        // Создаем 3 дня: вчера, сегодня, завтра
+        for (let i = -1; i <= 1; i++) {
+            const date = new Date();
+            date.setDate(this.currentDate.getDate() + i);
+            
+            const dayWrapper = document.createElement('div');
+            dayWrapper.className = 'day-wrapper';
+            dayWrapper.dataset.date = date.toISOString().split('T')[0];
+            
+            if (i === 0) {
+                dayWrapper.style.transform = 'translateX(0)';
+            } else if (i < 0) {
+                dayWrapper.style.transform = 'translateX(-100%)';
+            } else {
+                dayWrapper.style.transform = 'translateX(100%)';
+            }
+            
+            const dayScroll = document.createElement('div');
+            dayScroll.className = 'day-scroll';
+            
+            const dayGrid = document.createElement('div');
+            dayGrid.className = 'day-grid';
+            
+            const eventsContainer = document.createElement('div');
+            eventsContainer.className = 'events-container';
+            
+            const dockingZone = document.createElement('div');
+            dockingZone.className = 'sheet-docking-zone';
+            
+            const currentTimeLine = document.createElement('div');
+            currentTimeLine.className = 'current-time-line';
+            
+            // Генерация временной сетки
+            this.generateTimeGrid(dayGrid);
+            
+            dayScroll.appendChild(dayGrid);
+            dayWrapper.appendChild(dayScroll);
+            dayWrapper.appendChild(eventsContainer);
+            dayWrapper.appendChild(dockingZone);
+            dayWrapper.appendChild(currentTimeLine);
+            this.daysContainer.appendChild(dayWrapper);
+            
+            this.days.push({
+                element: dayWrapper,
+                date: date,
+                scrollElement: dayScroll,
+                eventsContainer: eventsContainer,
+                dockingZone: dockingZone,
+                currentTimeLine: currentTimeLine
+            });
+        }
+        
+        this.currentDayIndex = 1; // Центральный день (сегодня)
+        this.loadEventsForDay(this.currentDayIndex);
+        this.updateCurrentTimeLine();
     }
     
-    generateTimeGrid() {
-        this.dayGrid.innerHTML = '';
+    generateTimeGrid(container) {
+        container.innerHTML = '';
         
         for (let hour = 0; hour < 24; hour++) {
             const timeSlot = document.createElement('div');
             timeSlot.className = 'time-slot';
-            timeSlot.style.height = '60px';
             
             const timeLabel = document.createElement('div');
             timeLabel.className = 'time-label';
             timeLabel.textContent = `${hour.toString().padStart(2, '0')}:00`;
-            timeLabel.style.position = 'absolute';
-            timeLabel.style.top = '-10px';
-            timeLabel.style.left = '8px';
-            timeLabel.style.fontSize = '12px';
-            timeLabel.style.color = '#70757a';
-            timeLabel.style.width = '40px';
-            timeLabel.style.textAlign = 'right';
             
             const hourLine = document.createElement('div');
             hourLine.className = 'hour-line';
-            hourLine.style.position = 'absolute';
-            hourLine.style.left = '56px';
-            hourLine.style.right = '0';
-            hourLine.style.height = '1px';
-            hourLine.style.background = '#dadce0';
-            hourLine.style.top = '0';
             
             const halfHourLine = document.createElement('div');
             halfHourLine.className = 'half-hour-line';
-            halfHourLine.style.position = 'absolute';
-            halfHourLine.style.left = '56px';
-            halfHourLine.style.right = '0';
-            halfHourLine.style.height = '1px';
-            halfHourLine.style.background = '#e8eaed';
-            halfHourLine.style.top = '30px';
             
             timeSlot.appendChild(timeLabel);
             timeSlot.appendChild(hourLine);
             timeSlot.appendChild(halfHourLine);
             
-            this.dayGrid.appendChild(timeSlot);
+            container.appendChild(timeSlot);
         }
     }
     
@@ -237,30 +242,19 @@ class PersonalCalendar {
         this.colors.forEach(color => {
             const colorOption = document.createElement('div');
             colorOption.className = 'color-option';
-            colorOption.style.cssText = `
-                width: 36px;
-                height: 36px;
-                border-radius: 50%;
-                cursor: pointer;
-                border: 2px solid transparent;
-                background-color: ${color.value};
-                transition: transform 0.2s;
-            `;
+            colorOption.style.backgroundColor = color.value;
             colorOption.dataset.colorId = color.id;
             colorOption.title = color.name;
             
             if (color.id === this.selectedColor.id) {
-                colorOption.style.borderColor = '#202124';
-                colorOption.style.transform = 'scale(1.1)';
+                colorOption.classList.add('selected');
             }
             
             colorOption.addEventListener('click', () => {
                 document.querySelectorAll('.color-option').forEach(opt => {
-                    opt.style.borderColor = 'transparent';
-                    opt.style.transform = 'scale(1)';
+                    opt.classList.remove('selected');
                 });
-                colorOption.style.borderColor = '#202124';
-                colorOption.style.transform = 'scale(1.1)';
+                colorOption.classList.add('selected');
                 this.selectedColor = color;
             });
             
@@ -268,164 +262,297 @@ class PersonalCalendar {
         });
     }
     
-    updateDisplay() {
-        const dateStr = this.currentDate.toLocaleDateString('ru-RU', {
-            weekday: 'short',
-            month: 'numeric',
-            day: 'numeric'
-        }).replace(',', '');
+    handleTouchStart(e) {
+        const touch = e.touches[0];
+        this.swipeState.startX = touch.clientX;
+        this.swipeState.startY = touch.clientY;
+        this.swipeState.isSwiping = false;
         
-        this.currentDateElement.textContent = dateStr.charAt(0).toUpperCase() + dateStr.slice(1);
-    }
-    
-    updateCurrentTime() {
-        const now = new Date();
-        const timeStr = now.toLocaleTimeString('ru-RU', {
-            hour: '2-digit',
-            minute: '2-digit'
-        });
-        this.currentTimeElement.textContent = timeStr;
-    }
-    
-    updateCurrentTimeLine() {
-        const now = new Date();
-        const minutesSinceMidnight = now.getHours() * 60 + now.getMinutes();
-        const topPosition = (minutesSinceMidnight / 1440) * 100;
+        // Проверяем, не начали ли мы создавать событие
+        const rect = this.days[this.currentDayIndex].element.getBoundingClientRect();
+        const y = touch.clientY - rect.top + this.days[this.currentDayIndex].scrollElement.scrollTop;
         
-        // Показываем только если текущий день
-        const isToday = now.toDateString() === this.currentDate.toDateString();
-        
-        if (isToday) {
-            this.currentTimeLine.style.top = `${topPosition}%`;
-            this.currentTimeLine.style.display = 'block';
-        } else {
-            this.currentTimeLine.style.display = 'none';
+        // Если тап на свободном месте и не на событии
+        if (!this.isTouchOnEvent(touch.clientX, touch.clientY)) {
+            this.creationState.startY = y;
+            this.creationState.isCreating = false;
         }
     }
     
-    showCreateEventSheet(startTime = '09:00', endTime = '10:00') {
-        this.editingEventId = null;
-        this.sheetTitle.textContent = 'Новое событие';
-        this.eventTitleInput.value = '';
-        this.eventStartTime.value = startTime;
-        this.eventEndTime.value = endTime;
-        this.eventRepeat.value = 'none';
-        this.eventDescription.value = '';
-        this.selectedColor = this.colors[0];
-        this.generateColorPicker();
+    handleTouchMove(e) {
+        if (!this.swipeState.startX) return;
         
-        this.deleteEventBtn.style.display = 'none';
-        this.expandedContent.style.display = 'none';
+        const touch = e.touches[0];
+        const deltaX = touch.clientX - this.swipeState.startX;
+        const deltaY = touch.clientY - this.swipeState.startY;
         
-        this.openSheet();
+        // Определяем направление свайпа
+        if (!this.swipeState.isSwiping) {
+            if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 10) {
+                this.swipeState.isSwiping = true;
+                this.swipeState.direction = 'horizontal';
+                e.preventDefault();
+            } else if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > 10) {
+                this.swipeState.isSwiping = true;
+                this.swipeState.direction = 'vertical';
+            }
+        }
         
-        // Фокусируемся на названии
-        setTimeout(() => {
-            this.eventTitleInput.focus();
-        }, 100);
+        if (this.swipeState.isSwiping) {
+            if (this.swipeState.direction === 'horizontal') {
+                e.preventDefault();
+                
+                // Анимируем сдвиг дней
+                this.days.forEach((day, index) => {
+                    let offset = 0;
+                    if (index < this.currentDayIndex) {
+                        offset = -100 + (deltaX / window.innerWidth) * 100;
+                    } else if (index > this.currentDayIndex) {
+                        offset = 100 + (deltaX / window.innerWidth) * 100;
+                    } else {
+                        offset = (deltaX / window.innerWidth) * 100;
+                    }
+                    day.element.style.transform = `translateX(${offset}%)`;
+                });
+                
+                // Показываем индикаторы свайпа
+                if (deltaX > 50) {
+                    this.swipeLeft.classList.add('visible');
+                } else if (deltaX < -50) {
+                    this.swipeRight.classList.add('visible');
+                } else {
+                    this.swipeLeft.classList.remove('visible');
+                    this.swipeRight.classList.remove('visible');
+                }
+            } else if (this.swipeState.direction === 'vertical') {
+                // Создание события если отпустить в том же месте
+                if (Math.abs(deltaX) < 5 && Math.abs(deltaY) < 5) {
+                    // Ждем отпускания
+                } else {
+                    // Это скролл, отменяем создание события
+                    this.creationState.isCreating = false;
+                }
+            }
+        }
     }
     
-    showEditEventSheet(eventId) {
-        const event = this.events.find(e => e.id === eventId);
-        if (!event) return;
+    handleTouchEnd(e) {
+        if (!this.swipeState.isSwiping) {
+            // Просто тап - создаем событие если отпустили в том же месте
+            const touch = e.changedTouches[0];
+            const deltaX = Math.abs(touch.clientX - this.swipeState.startX);
+            const deltaY = Math.abs(touch.clientY - this.swipeState.startY);
+            
+            if (deltaX < 5 && deltaY < 5 && !this.isTouchOnEvent(touch.clientX, touch.clientY)) {
+                // Создаем событие
+                const rect = this.days[this.currentDayIndex].element.getBoundingClientRect();
+                const y = touch.clientY - rect.top + this.days[this.currentDayIndex].scrollElement.scrollTop;
+                this.createEventAtPosition(y);
+            }
+        } else if (this.swipeState.direction === 'horizontal') {
+            const touch = e.changedTouches[0];
+            const deltaX = touch.clientX - this.swipeState.startX;
+            
+            // Определяем, нужно ли переключить день
+            if (Math.abs(deltaX) > window.innerWidth * 0.2) {
+                if (deltaX > 0) {
+                    this.navigateDays(-1); // Свайп вправо -> предыдущий день
+                } else {
+                    this.navigateDays(1); // Свайп влево -> следующий день
+                }
+            } else {
+                // Возвращаем на место
+                this.resetDayPositions();
+            }
+            
+            // Скрываем индикаторы
+            this.swipeLeft.classList.remove('visible');
+            this.swipeRight.classList.remove('visible');
+        }
         
-        this.editingEventId = eventId;
-        this.sheetTitle.textContent = 'Редактировать событие';
-        this.eventTitleInput.value = event.title;
-        this.eventStartTime.value = event.startTime;
-        this.eventEndTime.value = event.endTime;
-        this.eventRepeat.value = event.repeat || 'none';
-        this.eventDescription.value = event.description || '';
-        
-        // Выбираем цвет
-        const color = this.colors.find(c => c.id === event.colorId) || this.colors[0];
-        this.selectedColor = color;
-        this.generateColorPicker();
-        
-        this.deleteEventBtn.style.display = 'flex';
-        this.expandedContent.style.display = 'block';
-        
-        this.openSheet();
+        this.swipeState.isSwiping = false;
+        this.swipeState.direction = null;
+        this.swipeState.startX = 0;
+        this.swipeState.startY = 0;
     }
     
-    openSheet() {
-        this.sheet.classList.add('open');
-        this.sheetOverlay.classList.add('visible');
-        document.body.style.overflow = 'hidden';
-    }
-    
-    closeSheet() {
-        this.sheet.classList.remove('open');
-        this.sheetOverlay.classList.remove('visible');
-        document.body.style.overflow = '';
+    handleMouseDown(e) {
+        if (e.button !== 0) return; // Только левая кнопка
         
-        setTimeout(() => {
-            this.expandedContent.style.display = '';
-        }, 300);
+        this.swipeState.startX = e.clientX;
+        this.swipeState.startY = e.clientY;
+        this.swipeState.isSwiping = false;
+        
+        // Проверяем, не на событии ли клик
+        if (!this.isMouseOnEvent(e.clientX, e.clientY)) {
+            this.creationState.startY = e.clientY + this.days[this.currentDayIndex].scrollElement.scrollTop;
+            this.creationState.isCreating = false;
+        }
     }
     
-    expandSheet() {
-        this.expandedContent.style.display = 'block';
-        this.expandedContent.classList.add('slide-in');
+    handleMouseMove(e) {
+        if (!this.swipeState.startX) return;
+        
+        const deltaX = e.clientX - this.swipeState.startX;
+        const deltaY = e.clientY - this.swipeState.startY;
+        
+        if (!this.swipeState.isSwiping) {
+            if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 5) {
+                this.swipeState.isSwiping = true;
+                this.swipeState.direction = 'horizontal';
+            } else if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > 5) {
+                this.swipeState.isSwiping = true;
+                this.swipeState.direction = 'vertical';
+            }
+        }
+        
+        if (this.swipeState.isSwiping && this.swipeState.direction === 'horizontal') {
+            // Анимируем сдвиг дней
+            this.days.forEach((day, index) => {
+                let offset = 0;
+                if (index < this.currentDayIndex) {
+                    offset = -100 + (deltaX / window.innerWidth) * 100;
+                } else if (index > this.currentDayIndex) {
+                    offset = 100 + (deltaX / window.innerWidth) * 100;
+                } else {
+                    offset = (deltaX / window.innerWidth) * 100;
+                }
+                day.element.style.transform = `translateX(${offset}%)`;
+            });
+            
+            // Показываем индикаторы
+            if (deltaX > 50) {
+                this.swipeLeft.classList.add('visible');
+            } else if (deltaX < -50) {
+                this.swipeRight.classList.add('visible');
+            } else {
+                this.swipeLeft.classList.remove('visible');
+                this.swipeRight.classList.remove('visible');
+            }
+        }
     }
     
-    saveEvent() {
-        const title = this.eventTitleInput.value.trim();
-        if (!title) {
-            this.eventTitleInput.focus();
+    handleMouseUp(e) {
+        if (!this.swipeState.isSwiping) {
+            // Просто клик - создаем событие если отпустили в том же месте
+            const deltaX = Math.abs(e.clientX - this.swipeState.startX);
+            const deltaY = Math.abs(e.clientY - this.swipeState.startY);
+            
+            if (deltaX < 5 && deltaY < 5 && !this.isMouseOnEvent(e.clientX, e.clientY)) {
+                const y = e.clientY + this.days[this.currentDayIndex].scrollElement.scrollTop;
+                this.createEventAtPosition(y);
+            }
+        } else if (this.swipeState.direction === 'horizontal') {
+            const deltaX = e.clientX - this.swipeState.startX;
+            
+            if (Math.abs(deltaX) > window.innerWidth * 0.2) {
+                if (deltaX > 0) {
+                    this.navigateDays(-1);
+                } else {
+                    this.navigateDays(1);
+                }
+            } else {
+                this.resetDayPositions();
+            }
+            
+            this.swipeLeft.classList.remove('visible');
+            this.swipeRight.classList.remove('visible');
+        }
+        
+        this.swipeState.isSwiping = false;
+        this.swipeState.direction = null;
+        this.swipeState.startX = 0;
+        this.swipeState.startY = 0;
+    }
+    
+    isTouchOnEvent(x, y) {
+        const elements = document.elementsFromPoint(x, y);
+        return elements.some(el => el.classList.contains('event'));
+    }
+    
+    isMouseOnEvent(x, y) {
+        return this.isTouchOnEvent(x, y);
+    }
+    
+    createEventAtPosition(y) {
+        const gridHeight = 1440; // 24 часа в минутах
+        const containerHeight = this.days[this.currentDayIndex].scrollElement.scrollHeight;
+        const scrollTop = this.days[this.currentDayIndex].scrollElement.scrollTop;
+        const visibleHeight = this.days[this.currentDayIndex].scrollElement.clientHeight;
+        
+        // Нормализуем позицию
+        const normalizedY = Math.min(Math.max(y, scrollTop), scrollTop + visibleHeight);
+        const relativeY = normalizedY - scrollTop;
+        
+        const startMinutes = Math.round((relativeY / visibleHeight) * gridHeight / 15) * 15;
+        const endMinutes = startMinutes + 60;
+        
+        this.showCreateEventSheet(
+            this.minutesToTime(startMinutes),
+            this.minutesToTime(endMinutes)
+        );
+    }
+    
+    navigateDays(direction) {
+        const newIndex = this.currentDayIndex + direction;
+        
+        if (newIndex < 0 || newIndex >= this.days.length) {
+            // Нужно загрузить новые дни
+            this.loadMoreDays(direction);
             return;
         }
         
-        const eventData = {
-            id: this.editingEventId || Date.now().toString(),
-            title: title,
-            startTime: this.eventStartTime.value,
-            endTime: this.eventEndTime.value,
-            colorId: this.selectedColor.id,
-            repeat: this.eventRepeat.value,
-            description: this.eventDescription.value,
-            date: this.currentDate.toISOString().split('T')[0]
-        };
-        
-        if (this.editingEventId) {
-            const index = this.events.findIndex(e => e.id === this.editingEventId);
-            if (index !== -1) {
-                this.events[index] = eventData;
+        // Анимация смены дней
+        this.days.forEach((day, index) => {
+            let offset = 0;
+            if (index < newIndex) {
+                offset = -100;
+            } else if (index > newIndex) {
+                offset = 100;
             }
-        } else {
-            this.events.push(eventData);
-        }
+            day.element.style.transform = `translateX(${offset}%)`;
+        });
         
-        localStorage.setItem('calendarEvents', JSON.stringify(this.events));
-        this.loadEvents();
-        this.closeSheet();
+        // Обновляем текущий день
+        setTimeout(() => {
+            this.currentDayIndex = newIndex;
+            this.currentDate = new Date(this.days[newIndex].date);
+            this.updateDisplay();
+            this.loadEventsForDay(newIndex);
+            this.updateCurrentTimeLine();
+            this.resetDayPositions();
+        }, 300);
     }
     
-    deleteEvent() {
-        if (this.editingEventId && confirm('Удалить это событие?')) {
-            this.events = this.events.filter(e => e.id !== this.editingEventId);
-            localStorage.setItem('calendarEvents', JSON.stringify(this.events));
-            this.loadEvents();
-            this.closeSheet();
-        }
+    resetDayPositions() {
+        this.days.forEach((day, index) => {
+            let offset = 0;
+            if (index < this.currentDayIndex) {
+                offset = -100;
+            } else if (index > this.currentDayIndex) {
+                offset = 100;
+            }
+            day.element.style.transform = `translateX(${offset}%)`;
+        });
     }
     
-    validateEventTimes() {
-        const start = this.timeToMinutes(this.eventStartTime.value);
-        const end = this.timeToMinutes(this.eventEndTime.value);
+    loadMoreDays(direction) {
+        // Упрощенная версия - просто создаем новый день
+        const newDate = new Date(this.currentDate);
+        newDate.setDate(newDate.getDate() + (direction * 3));
         
-        if (end <= start) {
-            this.eventEndTime.value = this.minutesToTime(start + 60);
-        }
+        this.currentDate = newDate;
+        this.generateDays();
     }
     
-    loadEvents() {
-        this.eventsContainer.innerHTML = '';
+    loadEventsForDay(dayIndex) {
+        const day = this.days[dayIndex];
+        const dateStr = day.date.toISOString().split('T')[0];
+        const dayEvents = this.events.filter(event => event.date === dateStr);
         
-        const currentDateStr = this.currentDate.toISOString().split('T')[0];
-        const dayEvents = this.events.filter(event => event.date === currentDateStr);
+        day.eventsContainer.innerHTML = '';
         
-        // Сортируем события по времени начала
+        // Сортируем события
         dayEvents.sort((a, b) => this.timeToMinutes(a.startTime) - this.timeToMinutes(b.startTime));
         
         // Группируем пересекающиеся события
@@ -433,7 +560,7 @@ class PersonalCalendar {
         
         groups.forEach((group, groupIndex) => {
             group.forEach((event, eventIndex) => {
-                this.createEventElement(event, group.length, eventIndex);
+                this.createEventElement(event, group.length, eventIndex, day);
             });
         });
     }
@@ -467,7 +594,7 @@ class PersonalCalendar {
         return groups;
     }
     
-    createEventElement(event, groupSize, indexInGroup) {
+    createEventElement(event, groupSize, indexInGroup, day) {
         const startMinutes = this.timeToMinutes(event.startTime);
         const endMinutes = this.timeToMinutes(event.endTime);
         const duration = endMinutes - startMinutes;
@@ -481,116 +608,104 @@ class PersonalCalendar {
         
         // Позиционирование для пересекающихся событий
         const left = 8 + (indexInGroup * 4);
-        const rightOffset = (groupSize - indexInGroup - 1) * 4 + 8;
+        const width = groupSize > 1 ? `calc(100% - ${(groupSize * 4) + 4}px)` : 'calc(100% - 16px)';
         
-        eventElement.style.cssText = `
-            position: absolute;
-            top: ${top}%;
-            height: ${height}%;
-            left: ${left}px;
-            right: ${rightOffset}px;
-            border-radius: 4px;
-            padding: 8px;
-            overflow: hidden;
-            cursor: pointer;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            transition: box-shadow 0.2s, transform 0.1s;
-            background-color: ${this.colors.find(c => c.id === event.colorId)?.value || '#1a73e8'};
-            color: white;
-            z-index: 10;
-        `;
+        eventElement.style.top = `${top}%`;
+        eventElement.style.height = `${height}%`;
+        eventElement.style.left = `${left}px`;
+        eventElement.style.width = width;
+        
+        const color = this.colors.find(c => c.id === event.colorId) || this.colors[0];
+        eventElement.style.backgroundColor = color.value;
         
         const content = document.createElement('div');
         content.className = 'event-content';
         content.innerHTML = `
-            <div class="event-title" style="font-size: 14px; font-weight: 500; line-height: 1.3;">${this.escapeHtml(event.title)}</div>
-            <div class="event-time" style="font-size: 12px; opacity: 0.9; margin-top: 2px;">${event.startTime} - ${event.endTime}</div>
+            <div class="event-title">${this.escapeHtml(event.title)}</div>
+            <div class="event-time">${event.startTime} - ${event.endTime}</div>
         `;
         
-        // Drag ручки
+        // Ручки для resize
         const topHandle = document.createElement('div');
         topHandle.className = 'event-resize-handle top';
-        topHandle.style.cssText = `
-            position: absolute;
-            left: 0;
-            right: 0;
-            height: 6px;
-            cursor: ns-resize;
-            z-index: 2;
-            top: 0;
-        `;
+        topHandle.dataset.edge = 'top';
         
         const bottomHandle = document.createElement('div');
         bottomHandle.className = 'event-resize-handle bottom';
-        bottomHandle.style.cssText = `
-            position: absolute;
-            left: 0;
-            right: 0;
-            height: 6px;
-            cursor: ns-resize;
-            z-index: 2;
-            bottom: 0;
-        `;
+        bottomHandle.dataset.edge = 'bottom';
         
         eventElement.appendChild(content);
         eventElement.appendChild(topHandle);
         eventElement.appendChild(bottomHandle);
         
-        // Клик для редактирования
+        // События
         eventElement.addEventListener('click', (e) => {
             if (e.target.closest('.event-resize-handle')) return;
             this.showEditEventSheet(event.id);
         });
         
-        // Простой drag & drop
+        // Drag & Drop
+        this.setupEventDrag(eventElement, event, day);
+        
+        // Resize
+        topHandle.addEventListener('mousedown', (e) => this.startResize(e, eventElement, event, 'top'));
+        bottomHandle.addEventListener('mousedown', (e) => this.startResize(e, eventElement, event, 'bottom'));
+        topHandle.addEventListener('touchstart', (e) => this.startResize(e, eventElement, event, 'top'));
+        bottomHandle.addEventListener('touchstart', (e) => this.startResize(e, eventElement, event, 'bottom'));
+        
+        day.eventsContainer.appendChild(eventElement);
+    }
+    
+    setupEventDrag(element, event, day) {
         let isDragging = false;
         let startY = 0;
         let startTop = 0;
         
-        eventElement.addEventListener('mousedown', (e) => {
-            if (e.target.closest('.event-resize-handle')) {
-                this.startResize(e, eventElement, event);
-                return;
-            }
-            
+        const startDrag = (clientY) => {
             isDragging = true;
-            startY = e.clientY;
-            startTop = top;
-            eventElement.style.opacity = '0.8';
-            eventElement.style.zIndex = '1000';
-            eventElement.style.boxShadow = '0 4px 12px rgba(0,0,0,0.2)';
+            startY = clientY;
+            startTop = parseFloat(element.style.top);
+            element.classList.add('dragging');
+        };
+        
+        const onMove = (clientY) => {
+            if (!isDragging) return;
             
-            const onMouseMove = (moveEvent) => {
-                if (!isDragging) return;
-                
-                const deltaY = moveEvent.clientY - startY;
-                const gridHeight = this.dayGrid.offsetHeight;
-                const deltaMinutes = (deltaY / gridHeight) * 1440;
-                const newTopMinutes = (startTop / 100) * 1440 + deltaMinutes;
-                const snappedMinutes = Math.round(newTopMinutes / 15) * 15;
-                
-                const duration = this.timeToMinutes(event.endTime) - this.timeToMinutes(event.startTime);
-                const newStartTime = this.minutesToTime(Math.max(0, Math.min(1440 - duration, snappedMinutes)));
-                const newEndTime = this.minutesToTime(this.timeToMinutes(newStartTime) + duration);
-                
-                eventElement.style.top = `${(snappedMinutes / 1440) * 100}%`;
-                event.startTime = newStartTime;
-                event.endTime = newEndTime;
-                
-                const timeElement = eventElement.querySelector('.event-time');
-                if (timeElement) {
-                    timeElement.textContent = `${newStartTime} - ${newEndTime}`;
-                }
-            };
+            const deltaY = clientY - startY;
+            const deltaPercent = (deltaY / day.eventsContainer.offsetHeight) * 100;
+            const newTop = startTop + deltaPercent;
+            const newMinutes = (newTop / 100) * 1440;
+            const snappedMinutes = Math.round(newMinutes / 15) * 15;
             
+            const duration = this.timeToMinutes(event.endTime) - this.timeToMinutes(event.startTime);
+            const newStartTime = this.minutesToTime(Math.max(0, Math.min(1440 - duration, snappedMinutes)));
+            const newEndTime = this.minutesToTime(this.timeToMinutes(newStartTime) + duration);
+            
+            element.style.top = `${(snappedMinutes / 1440) * 100}%`;
+            event.startTime = newStartTime;
+            event.endTime = newEndTime;
+            
+            const timeElement = element.querySelector('.event-time');
+            if (timeElement) {
+                timeElement.textContent = `${newStartTime} - ${newEndTime}`;
+            }
+        };
+        
+        const endDrag = () => {
+            isDragging = false;
+            element.classList.remove('dragging');
+            localStorage.setItem('calendarEvents', JSON.stringify(this.events));
+        };
+        
+        // Мышь
+        element.addEventListener('mousedown', (e) => {
+            if (e.target.closest('.event-resize-handle')) return;
+            e.stopPropagation();
+            startDrag(e.clientY);
+            
+            const onMouseMove = (e) => onMove(e.clientY);
             const onMouseUp = () => {
-                isDragging = false;
-                eventElement.style.opacity = '1';
-                eventElement.style.zIndex = '10';
-                eventElement.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
-                
-                localStorage.setItem('calendarEvents', JSON.stringify(this.events));
-                
+                endDrag();
                 document.removeEventListener('mousemove', onMouseMove);
                 document.removeEventListener('mouseup', onMouseUp);
             };
@@ -599,24 +714,39 @@ class PersonalCalendar {
             document.addEventListener('mouseup', onMouseUp);
         });
         
-        // Resize
-        topHandle.addEventListener('mousedown', (e) => this.startResize(e, eventElement, event, 'top'));
-        bottomHandle.addEventListener('mousedown', (e) => this.startResize(e, eventElement, event, 'bottom'));
-        
-        this.eventsContainer.appendChild(eventElement);
+        // Тач
+        element.addEventListener('touchstart', (e) => {
+            if (e.target.closest('.event-resize-handle')) return;
+            e.stopPropagation();
+            startDrag(e.touches[0].clientY);
+            
+            const onTouchMove = (e) => {
+                e.preventDefault();
+                onMove(e.touches[0].clientY);
+            };
+            const onTouchEnd = () => {
+                endDrag();
+                document.removeEventListener('touchmove', onTouchMove);
+                document.removeEventListener('touchend', onTouchEnd);
+            };
+            
+            document.addEventListener('touchmove', onTouchMove, { passive: false });
+            document.addEventListener('touchend', onTouchEnd);
+        });
     }
     
-    startResize(e, eventElement, event, edge = 'top') {
+    startResize(e, element, event, edge) {
         e.stopPropagation();
         
-        const startY = e.clientY;
-        const startHeight = parseFloat(eventElement.style.height);
-        const startTop = parseFloat(eventElement.style.top);
+        const startY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+        const startHeight = parseFloat(element.style.height);
+        const startTop = parseFloat(element.style.top);
         
-        const onMouseMove = (moveEvent) => {
-            const deltaY = moveEvent.clientY - startY;
-            const gridHeight = this.dayGrid.offsetHeight;
-            const deltaMinutes = (deltaY / gridHeight) * 1440;
+        const container = element.parentElement;
+        
+        const onMove = (clientY) => {
+            const deltaY = clientY - startY;
+            const deltaMinutes = (deltaY / container.offsetHeight) * 1440;
             const snappedDeltaMinutes = Math.round(deltaMinutes / 15) * 15;
             
             const startMinutes = this.timeToMinutes(event.startTime);
@@ -624,62 +754,292 @@ class PersonalCalendar {
             
             let newStartMinutes = startMinutes;
             let newEndMinutes = endMinutes;
-            let newHeight = startHeight;
-            let newTop = startTop;
             
             if (edge === 'top') {
                 newStartMinutes = Math.max(0, Math.min(endMinutes - 15, startMinutes + snappedDeltaMinutes));
-                newHeight = ((endMinutes - newStartMinutes) / 1440) * 100;
-                newTop = (newStartMinutes / 1440) * 100;
+                const newHeight = ((endMinutes - newStartMinutes) / 1440) * 100;
+                const newTop = (newStartMinutes / 1440) * 100;
                 
-                eventElement.style.top = `${newTop}%`;
-                eventElement.style.height = `${newHeight}%`;
+                element.style.top = `${newTop}%`;
+                element.style.height = `${newHeight}%`;
                 
                 event.startTime = this.minutesToTime(newStartMinutes);
             } else {
                 newEndMinutes = Math.min(1440, Math.max(startMinutes + 15, endMinutes + snappedDeltaMinutes));
-                newHeight = ((newEndMinutes - startMinutes) / 1440) * 100;
+                const newHeight = ((newEndMinutes - startMinutes) / 1440) * 100;
                 
-                eventElement.style.height = `${newHeight}%`;
+                element.style.height = `${newHeight}%`;
                 
                 event.endTime = this.minutesToTime(newEndMinutes);
             }
             
-            const timeElement = eventElement.querySelector('.event-time');
+            const timeElement = element.querySelector('.event-time');
             if (timeElement) {
                 timeElement.textContent = `${event.startTime} - ${event.endTime}`;
             }
         };
         
-        const onMouseUp = () => {
+        const onEnd = () => {
             localStorage.setItem('calendarEvents', JSON.stringify(this.events));
-            
-            document.removeEventListener('mousemove', onMouseMove);
-            document.removeEventListener('mouseup', onMouseUp);
         };
         
-        document.addEventListener('mousemove', onMouseMove);
-        document.addEventListener('mouseup', onMouseUp);
+        // Мышь
+        if (!e.type.includes('touch')) {
+            const onMouseMove = (e) => onMove(e.clientY);
+            const onMouseUp = () => {
+                onEnd();
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
+            };
+            
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+        } else {
+            // Тач
+            e.preventDefault();
+            const onTouchMove = (e) => {
+                e.preventDefault();
+                onMove(e.touches[0].clientY);
+            };
+            const onTouchEnd = () => {
+                onEnd();
+                document.removeEventListener('touchmove', onTouchMove);
+                document.removeEventListener('touchend', onTouchEnd);
+            };
+            
+            document.addEventListener('touchmove', onTouchMove, { passive: false });
+            document.addEventListener('touchend', onTouchEnd);
+        }
     }
     
-    previousDay() {
-        this.currentDate.setDate(this.currentDate.getDate() - 1);
-        this.updateDisplay();
-        this.loadEvents();
-        this.updateCurrentTimeLine();
+    showCreateEventSheet(startTime = '09:00', endTime = '10:00') {
+        this.editingEventId = null;
+        this.sheetTitle.textContent = 'Новое событие';
+        this.eventTitleInput.value = '';
+        this.eventStartTime.value = startTime;
+        this.eventEndTime.value = endTime;
+        this.eventRepeat.value = 'none';
+        this.eventDescription.value = '';
+        this.selectedColor = this.colors[0];
+        this.generateColorPicker();
+        
+        this.deleteEventBtn.style.display = 'none';
+        this.expandedContent.style.display = 'none';
+        
+        this.openSheet();
+        
+        setTimeout(() => {
+            this.eventTitleInput.focus();
+        }, 100);
     }
     
-    nextDay() {
-        this.currentDate.setDate(this.currentDate.getDate() + 1);
-        this.updateDisplay();
-        this.loadEvents();
-        this.updateCurrentTimeLine();
+    showEditEventSheet(eventId) {
+        const event = this.events.find(e => e.id === eventId);
+        if (!event) return;
+        
+        this.editingEventId = eventId;
+        this.sheetTitle.textContent = 'Редактировать событие';
+        this.eventTitleInput.value = event.title;
+        this.eventStartTime.value = event.startTime;
+        this.eventEndTime.value = event.endTime;
+        this.eventRepeat.value = event.repeat || 'none';
+        this.eventDescription.value = event.description || '';
+        
+        const color = this.colors.find(c => c.id === event.colorId) || this.colors[0];
+        this.selectedColor = color;
+        this.generateColorPicker();
+        
+        this.deleteEventBtn.style.display = 'flex';
+        this.expandedContent.style.display = 'block';
+        
+        this.openSheet();
+    }
+    
+    openSheet() {
+        this.sheet.classList.remove('docked');
+        this.sheet.classList.add('open');
+        this.sheetOverlay.classList.add('visible');
+        document.body.style.overflow = 'hidden';
+    }
+    
+    closeSheet() {
+        this.sheet.classList.remove('open', 'docked');
+        this.sheetOverlay.classList.remove('visible');
+        document.body.style.overflow = '';
+        
+        setTimeout(() => {
+            this.expandedContent.style.display = '';
+            this.sheetState.isDocked = false;
+        }, 300);
+    }
+    
+    expandSheet() {
+        this.expandedContent.style.display = 'block';
+        this.expandedContent.classList.add('slide-in');
+    }
+    
+    startSheetDrag(e) {
+        e.preventDefault();
+        
+        const startY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+        const startHeight = this.sheet.offsetHeight;
+        
+        this.sheetState.isDragging = true;
+        this.sheetState.startY = startY;
+        this.sheetState.startHeight = startHeight;
+        
+        const onMove = (clientY) => {
+            if (!this.sheetState.isDragging) return;
+            
+            const deltaY = clientY - this.sheetState.startY;
+            const newHeight = Math.max(200, Math.min(window.innerHeight * 0.9, startHeight - deltaY));
+            
+            const percentVisible = (newHeight / (window.innerHeight * 0.9)) * 100;
+            
+            if (percentVisible < 40) {
+                // Притягиваем к док-зоне
+                this.sheet.classList.add('docked');
+                this.sheetState.isDocked = true;
+                
+                // Показываем док-зону на текущем дне
+                this.days[this.currentDayIndex].dockingZone.classList.add('active');
+            } else {
+                this.sheet.classList.remove('docked');
+                this.sheetState.isDocked = false;
+                this.days[this.currentDayIndex].dockingZone.classList.remove('active');
+            }
+        };
+        
+        const onEnd = () => {
+            this.sheetState.isDragging = false;
+            
+            if (this.sheetState.isDocked) {
+                this.sheet.classList.add('docked');
+            } else {
+                this.sheet.classList.remove('docked');
+            }
+            
+            this.days[this.currentDayIndex].dockingZone.classList.remove('active');
+        };
+        
+        // Мышь
+        if (!e.type.includes('touch')) {
+            const onMouseMove = (e) => onMove(e.clientY);
+            const onMouseUp = () => {
+                onEnd();
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
+            };
+            
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+        } else {
+            // Тач
+            const onTouchMove = (e) => {
+                e.preventDefault();
+                onMove(e.touches[0].clientY);
+            };
+            const onTouchEnd = () => {
+                onEnd();
+                document.removeEventListener('touchmove', onTouchMove);
+                document.removeEventListener('touchend', onTouchEnd);
+            };
+            
+            document.addEventListener('touchmove', onTouchMove, { passive: false });
+            document.addEventListener('touchend', onTouchEnd);
+        }
+    }
+    
+    saveEvent() {
+        const title = this.eventTitleInput.value.trim();
+        if (!title) {
+            this.eventTitleInput.focus();
+            return;
+        }
+        
+        const eventData = {
+            id: this.editingEventId || Date.now().toString(),
+            title: title,
+            startTime: this.eventStartTime.value,
+            endTime: this.eventEndTime.value,
+            colorId: this.selectedColor.id,
+            repeat: this.eventRepeat.value,
+            description: this.eventDescription.value,
+            date: this.currentDate.toISOString().split('T')[0]
+        };
+        
+        if (this.editingEventId) {
+            const index = this.events.findIndex(e => e.id === this.editingEventId);
+            if (index !== -1) {
+                this.events[index] = eventData;
+            }
+        } else {
+            this.events.push(eventData);
+        }
+        
+        localStorage.setItem('calendarEvents', JSON.stringify(this.events));
+        this.loadEventsForDay(this.currentDayIndex);
+        this.closeSheet();
+    }
+    
+    deleteEvent() {
+        if (this.editingEventId && confirm('Удалить это событие?')) {
+            this.events = this.events.filter(e => e.id !== this.editingEventId);
+            localStorage.setItem('calendarEvents', JSON.stringify(this.events));
+            this.loadEventsForDay(this.currentDayIndex);
+            this.closeSheet();
+        }
+    }
+    
+    validateEventTimes() {
+        const start = this.timeToMinutes(this.eventStartTime.value);
+        const end = this.timeToMinutes(this.eventEndTime.value);
+        
+        if (end <= start) {
+            this.eventEndTime.value = this.minutesToTime(start + 60);
+        }
+    }
+    
+    updateDisplay() {
+        const dateStr = this.currentDate.toLocaleDateString('ru-RU', {
+            weekday: 'short',
+            month: 'numeric',
+            day: 'numeric'
+        }).replace(',', '');
+        
+        this.currentDateElement.textContent = dateStr.charAt(0).toUpperCase() + dateStr.slice(1);
+    }
+    
+    updateCurrentTime() {
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString('ru-RU', {
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+        this.currentTimeElement.textContent = timeStr;
+    }
+    
+    updateCurrentTimeLine() {
+        const now = new Date();
+        const minutesSinceMidnight = now.getHours() * 60 + now.getMinutes();
+        const topPosition = (minutesSinceMidnight / 1440) * 100;
+        
+        this.days.forEach((day, index) => {
+            const isToday = now.toDateString() === day.date.toDateString();
+            
+            if (isToday) {
+                day.currentTimeLine.style.top = `${topPosition}%`;
+                day.currentTimeLine.style.display = 'block';
+            } else {
+                day.currentTimeLine.style.display = 'none';
+            }
+        });
     }
     
     goToToday() {
         this.currentDate = new Date();
+        this.generateDays();
         this.updateDisplay();
-        this.loadEvents();
         this.updateCurrentTimeLine();
     }
     
@@ -704,30 +1064,5 @@ class PersonalCalendar {
 
 // Инициализация при загрузке страницы
 document.addEventListener('DOMContentLoaded', () => {
-    // Удаляем Service Worker регистрацию для GitHub Pages
-    if ('serviceWorker' in navigator && window.location.protocol === 'https:') {
-        navigator.serviceWorker.register('sw.js')
-            .catch(err => console.log('Service Worker не зарегистрирован:', err));
-    }
-    
-    // Запускаем приложение
     window.calendarApp = new PersonalCalendar();
-    
-    // Простая PWA инсталляция
-    let deferredPrompt;
-    
-    window.addEventListener('beforeinstallprompt', (e) => {
-        e.preventDefault();
-        deferredPrompt = e;
-        
-        // Показываем кнопку установки
-        setTimeout(() => {
-            if (confirm('Хотите установить приложение на устройство?')) {
-                deferredPrompt.prompt();
-                deferredPrompt.userChoice.then(() => {
-                    deferredPrompt = null;
-                });
-            }
-        }, 3000);
-    });
 });
