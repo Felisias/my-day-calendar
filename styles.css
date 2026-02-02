@@ -4,13 +4,13 @@
     padding: 0;
     box-sizing: border-box;
     -webkit-tap-highlight-color: transparent;
-    touch-action: pan-y;
 }
 
 body, html {
     height: 100%;
     width: 100%;
     overflow: hidden;
+    touch-action: none;
 }
 
 body {
@@ -89,12 +89,13 @@ body {
     font-size: 24px;
 }
 
-/* Контейнер дней */
+/* Контейнер дней - FIX для скролла */
 .days-container {
     flex: 1;
     position: relative;
     overflow: hidden;
     background: #fff;
+    touch-action: pan-y;
 }
 
 .day-wrapper {
@@ -103,12 +104,12 @@ body {
     left: 0;
     width: 100%;
     height: 100%;
-    transition: transform 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94);
     will-change: transform;
-    z-index: 1;
+    transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
 
 .day-wrapper.current {
+    transform: translateX(0);
     z-index: 2;
 }
 
@@ -122,7 +123,8 @@ body {
     z-index: 1;
 }
 
-.day-scroll {
+/* Сетка дня с FIX для скролла */
+.day-grid-wrapper {
     width: 100%;
     height: 100%;
     overflow-y: scroll;
@@ -130,13 +132,13 @@ body {
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
     -ms-overflow-style: none;
+    touch-action: pan-y;
 }
 
-.day-scroll::-webkit-scrollbar {
+.day-grid-wrapper::-webkit-scrollbar {
     display: none;
 }
 
-/* Сетка дня */
 .day-grid {
     position: relative;
     min-height: calc(1440px + 100vh);
@@ -146,6 +148,7 @@ body {
 .time-slot {
     height: 60px;
     position: relative;
+    pointer-events: none;
 }
 
 .time-label {
@@ -157,6 +160,7 @@ body {
     width: 40px;
     text-align: right;
     user-select: none;
+    pointer-events: none;
 }
 
 .hour-line {
@@ -166,6 +170,7 @@ body {
     height: 1px;
     background: #dadce0;
     top: 0;
+    pointer-events: none;
 }
 
 .half-hour-line {
@@ -175,6 +180,7 @@ body {
     height: 1px;
     background: #e8eaed;
     top: 30px;
+    pointer-events: none;
 }
 
 /* Контейнер событий */
@@ -199,11 +205,11 @@ body {
     cursor: pointer;
     pointer-events: auto;
     box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    transition: transform 0.15s, box-shadow 0.15s;
     user-select: none;
     -webkit-user-select: none;
     z-index: 11;
     border-left: 4px solid rgba(255,255,255,0.3);
+    transition: transform 0.1s;
 }
 
 .event:active {
@@ -211,9 +217,14 @@ body {
 }
 
 .event.dragging {
-    opacity: 0.85;
+    opacity: 0.9;
     z-index: 1000;
     box-shadow: 0 8px 25px rgba(0,0,0,0.2);
+    transition: none;
+}
+
+.event.editing {
+    z-index: 999;
 }
 
 .event-content {
@@ -222,28 +233,37 @@ body {
     font-weight: 500;
     line-height: 1.3;
     word-break: break-word;
+    pointer-events: none;
 }
 
 .event-time {
     font-size: 12px;
     opacity: 0.9;
     margin-top: 2px;
+    pointer-events: none;
 }
 
+/* Ручки resize - всегда видны при редактировании */
 .event-resize-handle {
     position: absolute;
     left: 0;
     right: 0;
-    height: 16px;
+    height: 20px;
     cursor: ns-resize;
     z-index: 12;
     opacity: 0;
     transition: opacity 0.2s;
+    display: none;
 }
 
-.event:hover .event-resize-handle,
 .event.editing .event-resize-handle {
-    opacity: 1;
+    display: block;
+    opacity: 0.5;
+}
+
+.event-resize-handle:hover,
+.event-resize-handle:active {
+    opacity: 1 !important;
 }
 
 .event-resize-handle.top {
@@ -259,10 +279,10 @@ body {
     position: absolute;
     left: 50%;
     transform: translateX(-50%);
-    width: 40px;
-    height: 4px;
-    background: rgba(255,255,255,0.6);
-    border-radius: 2px;
+    width: 60px;
+    height: 6px;
+    background: rgba(255,255,255,0.8);
+    border-radius: 3px;
 }
 
 .event-resize-handle.top::after {
@@ -281,15 +301,15 @@ body {
     border: 2px solid #1a73e8;
     border-radius: 8px;
     background: rgba(26, 115, 232, 0.08);
-    pointer-events: auto;
+    pointer-events: none;
     z-index: 1000;
     opacity: 0;
-    transition: opacity 0.2s;
     box-shadow: 0 4px 12px rgba(26, 115, 232, 0.15);
 }
 
 .event-preview.visible {
     opacity: 1;
+    pointer-events: auto;
 }
 
 .preview-resize-handle {
@@ -299,6 +319,16 @@ body {
     height: 24px;
     cursor: ns-resize;
     z-index: 1001;
+    opacity: 0;
+}
+
+.event-preview.visible .preview-resize-handle {
+    opacity: 0.5;
+}
+
+.preview-resize-handle:hover,
+.preview-resize-handle:active {
+    opacity: 1 !important;
 }
 
 .preview-resize-handle.top {
@@ -318,13 +348,6 @@ body {
     height: 6px;
     background: #1a73e8;
     border-radius: 3px;
-    opacity: 0.6;
-    transition: opacity 0.2s;
-}
-
-.preview-resize-handle:hover::after,
-.preview-resize-handle:active::after {
-    opacity: 1;
 }
 
 /* Линия текущего времени - FIXED позиция */
@@ -337,6 +360,7 @@ body {
     z-index: 50;
     pointer-events: none;
     transition: top 0.1s linear;
+    will-change: top;
 }
 
 .current-time-line::before {
@@ -827,4 +851,20 @@ body {
         bottom: max(24px, env(safe-area-inset-bottom));
         right: max(24px, env(safe-area-inset-right));
     }
+}
+
+/* Улучшенный скролл */
+.scrollable {
+    -webkit-overflow-scrolling: touch;
+    overflow-scrolling: touch;
+}
+
+/* Grid линии для лучшей видимости */
+.grid-line {
+    position: absolute;
+    left: 56px;
+    right: 0;
+    height: 1px;
+    background: #f0f0f0;
+    pointer-events: none;
 }
