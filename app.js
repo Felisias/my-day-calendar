@@ -1,54 +1,79 @@
-// Основной класс приложения
 class PersonalCalendar {
     constructor() {
         this.currentDate = new Date();
         this.events = JSON.parse(localStorage.getItem('calendarEvents') || '[]');
         this.editingEventId = null;
         
-        // Состояние свайпа
+        // Состояние для скролла и свайпа
+        this.scrollState = {
+            isScrolling: false,
+            startY: 0,
+            startScrollTop: 0,
+            velocity: 0,
+            lastY: 0,
+            lastTime: 0,
+            momentumId: null
+        };
+        
         this.swipeState = {
             isSwiping: false,
             startX: 0,
             startY: 0,
-            currentTranslateX: 0,
             direction: null,
+            lastX: 0,
             velocity: 0,
-            lastMoveTime: 0
+            momentumId: null
         };
         
-        // Состояние создания события
+        // Состояние для создания событий
         this.creationState = {
             isCreating: false,
             dayIndex: null,
             startY: 0,
-            endY: 0,
+            currentY: 0,
             previewElement: null,
             resizeEdge: null
         };
         
-        // Состояние sheet
+        // Состояние для drag & drop событий
+        this.dragState = {
+            isDragging: false,
+            element: null,
+            event: null,
+            startY: 0,
+            startTop: 0,
+            currentTop: 0,
+            snapInterval: 2.5, // 15 минут в процентах (1440мин / 15мин = 96 интервалов, 100% / 96 ≈ 1.0417%)
+            momentumId: null
+        };
+        
+        // Состояние для resize событий
+        this.resizeState = {
+            isResizing: false,
+            element: null,
+            event: null,
+            edge: null,
+            startY: 0,
+            startTop: 0,
+            startHeight: 0,
+            currentTop: 0,
+            currentHeight: 0,
+            snapInterval: 2.5,
+            momentumId: null
+        };
+        
+        // Состояние для sheet
         this.sheetState = {
             isDragging: false,
             startY: 0,
             startHeight: 0
         };
         
-        // Состояние редактирования времени
-        this.timeEditState = {
-            isResizing: false,
-            resizeEdge: null,
-            element: null,
-            event: null,
-            startY: 0,
-            startTop: 0,
-            startHeight: 0
-        };
-        
-        // Дни для отображения
+        // Дни для отображения (упрощенная версия)
         this.days = [];
-        this.currentDayIndex = 1; // Центральный день
+        this.currentDayIndex = 1;
         
-        // Цвета Google Calendar
+        // Цвета
         this.colors = [
             { id: 1, name: 'Фламинго', value: '#e67c73' },
             { id: 2, name: 'Шалфей', value: '#33b679' },
@@ -73,21 +98,19 @@ class PersonalCalendar {
         this.updateDisplay();
         this.updateCurrentTimeLine();
         
-        // Обновление времени
         this.updateCurrentTime();
         setInterval(() => {
             this.updateCurrentTime();
             this.updateCurrentTimeLine();
         }, 60000);
-        
-        // Проверка клавиатуры
-        this.setupKeyboardDetection();
     }
     
     cacheElements() {
         this.daysContainer = document.getElementById('days-container');
         this.currentDateElement = document.getElementById('current-date');
         this.currentTimeElement = document.getElementById('current-time');
+        
+        // Создаем линию времени
         this.currentTimeLine = document.createElement('div');
         this.currentTimeLine.className = 'current-time-line';
         document.body.appendChild(this.currentTimeLine);
@@ -125,18 +148,18 @@ class PersonalCalendar {
         this.daysContainer.innerHTML = '';
         this.days = [];
         
-        // Создаем 5 дней для плавной навигации
-        for (let i = -2; i <= 2; i++) {
+        // Создаем 3 дня: вчера, сегодня, завтра
+        for (let i = -1; i <= 1; i++) {
             const date = new Date(this.currentDate);
             date.setDate(date.getDate() + i);
             
             const dayWrapper = document.createElement('div');
             dayWrapper.className = 'day-wrapper';
-            dayWrapper.dataset.date = date.toISOString().split('T')[0];
-            dayWrapper.dataset.index = i + 2;
+            dayWrapper.dataset.index = i + 1;
             
-            const dayScroll = document.createElement('div');
-            dayScroll.className = 'day-scroll';
+            const dayGridWrapper = document.createElement('div');
+            dayGridWrapper.className = 'day-grid-wrapper';
+            dayGridWrapper.addEventListener('scroll', () => this.updateCurrentTimeLine());
             
             const dayGrid = document.createElement('div');
             dayGrid.className = 'day-grid';
@@ -150,8 +173,8 @@ class PersonalCalendar {
             // Генерация временной сетки
             this.generateTimeGrid(dayGrid);
             
-            dayScroll.appendChild(dayGrid);
-            dayWrapper.appendChild(dayScroll);
+            dayGridWrapper.appendChild(dayGrid);
+            dayWrapper.appendChild(dayGridWrapper);
             dayWrapper.appendChild(eventsContainer);
             dayWrapper.appendChild(dockingZone);
             this.daysContainer.appendChild(dayWrapper);
@@ -159,18 +182,21 @@ class PersonalCalendar {
             this.days.push({
                 element: dayWrapper,
                 date: date,
-                scrollElement: dayScroll,
+                gridWrapper: dayGridWrapper,
+                grid: dayGrid,
                 eventsContainer: eventsContainer,
                 dockingZone: dockingZone,
                 events: []
             });
         }
         
-        // Устанавливаем позиции
+        // Устанавливаем начальные позиции
+        this.currentDayIndex = 1;
         this.updateDayPositions();
-        
-        // Загружаем события для всех дней
         this.loadAllEvents();
+        
+        // Настраиваем скролл для центрального дня
+        this.setupScrollForCurrentDay();
     }
     
     generateTimeGrid(container) {
@@ -215,12 +241,157 @@ class PersonalCalendar {
         });
     }
     
+    setupScrollForCurrentDay() {
+        const currentDay = this.days[this.currentDayIndex];
+        if (!currentDay) return;
+        
+        // Настраиваем плавный скролл для текущего дня
+        this.setupSmoothScroll(currentDay.gridWrapper);
+    }
+    
+    setupSmoothScroll(element) {
+        let isScrolling = false;
+        let startY = 0;
+        let startScrollTop = 0;
+        let velocity = 0;
+        let lastY = 0;
+        let lastTime = 0;
+        let momentumId = null;
+        
+        const applyMomentum = () => {
+            if (Math.abs(velocity) < 0.1) {
+                velocity = 0;
+                if (momentumId) {
+                    cancelAnimationFrame(momentumId);
+                    momentumId = null;
+                }
+                return;
+            }
+            
+            element.scrollTop += velocity;
+            velocity *= 0.95; // Замедление
+            
+            momentumId = requestAnimationFrame(applyMomentum);
+        };
+        
+        const onTouchStart = (e) => {
+            if (e.touches.length !== 1) return;
+            
+            isScrolling = true;
+            startY = e.touches[0].clientY;
+            startScrollTop = element.scrollTop;
+            velocity = 0;
+            lastY = startY;
+            lastTime = Date.now();
+            
+            if (momentumId) {
+                cancelAnimationFrame(momentumId);
+                momentumId = null;
+            }
+        };
+        
+        const onTouchMove = (e) => {
+            if (!isScrolling || e.touches.length !== 1) return;
+            
+            const currentY = e.touches[0].clientY;
+            const deltaY = startY - currentY;
+            const newScrollTop = startScrollTop + deltaY;
+            
+            // Плавный скролл
+            element.scrollTop = newScrollTop;
+            
+            // Рассчитываем скорость для инерции
+            const currentTime = Date.now();
+            const timeDiff = currentTime - lastTime;
+            
+            if (timeDiff > 0) {
+                velocity = (currentY - lastY) / timeDiff;
+            }
+            
+            lastY = currentY;
+            lastTime = currentTime;
+        };
+        
+        const onTouchEnd = () => {
+            if (!isScrolling) return;
+            isScrolling = false;
+            
+            // Применяем инерцию
+            if (Math.abs(velocity) > 0.5) {
+                momentumId = requestAnimationFrame(applyMomentum);
+            }
+        };
+        
+        // Mouse события для десктопа
+        const onMouseDown = (e) => {
+            if (e.button !== 0) return;
+            
+            isScrolling = true;
+            startY = e.clientY;
+            startScrollTop = element.scrollTop;
+            velocity = 0;
+            lastY = startY;
+            lastTime = Date.now();
+            
+            if (momentumId) {
+                cancelAnimationFrame(momentumId);
+                momentumId = null;
+            }
+            
+            const onMouseMove = (e) => {
+                if (!isScrolling) return;
+                
+                const currentY = e.clientY;
+                const deltaY = startY - currentY;
+                const newScrollTop = startScrollTop + deltaY;
+                
+                element.scrollTop = newScrollTop;
+                
+                const currentTime = Date.now();
+                const timeDiff = currentTime - lastTime;
+                
+                if (timeDiff > 0) {
+                    velocity = (currentY - lastY) / timeDiff;
+                }
+                
+                lastY = currentY;
+                lastTime = currentTime;
+            };
+            
+            const onMouseUp = () => {
+                isScrolling = false;
+                
+                if (Math.abs(velocity) > 0.5) {
+                    momentumId = requestAnimationFrame(applyMomentum);
+                }
+                
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
+            };
+            
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+        };
+        
+        // Удаляем старые обработчики
+        element.removeEventListener('touchstart', onTouchStart);
+        element.removeEventListener('touchmove', onTouchMove);
+        element.removeEventListener('touchend', onTouchEnd);
+        element.removeEventListener('mousedown', onMouseDown);
+        
+        // Добавляем новые обработчики
+        element.addEventListener('touchstart', onTouchStart, { passive: true });
+        element.addEventListener('touchmove', onTouchMove, { passive: true });
+        element.addEventListener('touchend', onTouchEnd, { passive: true });
+        element.addEventListener('mousedown', onMouseDown);
+    }
+    
     setupEventListeners() {
-        // Свайп дней
-        this.setupSwipeListeners();
+        // Свайп между днями
+        this.setupSwipeNavigation();
         
         // Создание событий
-        this.setupCreationListeners();
+        this.setupEventCreation();
         
         // Кнопки
         this.addEventFab.addEventListener('click', () => this.showCreateEventSheet());
@@ -240,7 +411,9 @@ class PersonalCalendar {
         // Автофокус и поднятие sheet
         this.eventTitleInput.addEventListener('focus', () => {
             this.expandSheet();
-            this.scrollSheetToInput();
+            setTimeout(() => {
+                this.eventTitleInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 100);
         });
         
         // Валидация времени
@@ -262,25 +435,23 @@ class PersonalCalendar {
                 this.closeSheet();
             }
         });
-        
-        // Ресайз окна
-        window.addEventListener('resize', () => {
-            this.updateCurrentTimeLine();
-        });
     }
     
-    setupSwipeListeners() {
+    setupSwipeNavigation() {
         let startX, startY, startTime;
+        let isSwiping = false;
+        let direction = null;
+        
+        const getCurrentDayElement = () => {
+            return this.days[this.currentDayIndex]?.gridWrapper;
+        };
         
         const handleStart = (clientX, clientY) => {
             startX = clientX;
             startY = clientY;
             startTime = Date.now();
-            this.swipeState.isSwiping = false;
-            this.swipeState.startX = clientX;
-            this.swipeState.startY = clientY;
-            this.swipeState.velocity = 0;
-            this.swipeState.lastMoveTime = startTime;
+            isSwiping = false;
+            direction = null;
         };
         
         const handleMove = (clientX, clientY) => {
@@ -288,109 +459,118 @@ class PersonalCalendar {
             
             const deltaX = clientX - startX;
             const deltaY = clientY - startY;
-            const currentTime = Date.now();
-            const timeDiff = currentTime - this.swipeState.lastMoveTime;
             
-            if (!this.swipeState.isSwiping) {
+            if (!isSwiping) {
                 // Определяем направление
                 if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 10) {
-                    this.swipeState.isSwiping = true;
-                    this.swipeState.direction = 'horizontal';
+                    isSwiping = true;
+                    direction = 'horizontal';
                 } else if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > 10) {
-                    this.swipeState.isSwiping = true;
-                    this.swipeState.direction = 'vertical';
+                    isSwiping = true;
+                    direction = 'vertical';
+                    
+                    // Блокируем скролл по умолчанию для вертикального свайпа
+                    const currentDay = getCurrentDayElement();
+                    if (currentDay) {
+                        currentDay.style.overflowY = 'hidden';
+                    }
                 }
             }
             
-            if (this.swipeState.isSwiping && this.swipeState.direction === 'horizontal') {
-                // Плавный свайп дней
-                const translateX = (deltaX / window.innerWidth) * 100;
-                this.swipeState.currentTranslateX = translateX;
-                
-                this.days.forEach((day, index) => {
-                    const baseTranslate = (index - this.currentDayIndex) * 100;
-                    day.element.style.transform = `translateX(${baseTranslate + translateX}%)`;
-                    day.element.style.transition = 'none';
-                });
-                
-                // Показываем индикаторы
-                if (deltaX > 50) {
-                    this.swipeLeft.classList.add('visible');
-                    this.swipeRight.classList.remove('visible');
-                } else if (deltaX < -50) {
-                    this.swipeRight.classList.add('visible');
-                    this.swipeLeft.classList.remove('visible');
-                } else {
-                    this.swipeLeft.classList.remove('visible');
-                    this.swipeRight.classList.remove('visible');
+            if (isSwiping) {
+                if (direction === 'horizontal') {
+                    // Свайп дней
+                    const translateX = (deltaX / window.innerWidth) * 100;
+                    
+                    this.days.forEach((day, index) => {
+                        const baseTranslate = (index - this.currentDayIndex) * 100;
+                        day.element.style.transform = `translateX(${baseTranslate + translateX}%)`;
+                        day.element.style.transition = 'none';
+                    });
+                    
+                    // Показываем индикаторы
+                    if (deltaX > 50) {
+                        this.swipeLeft.classList.add('visible');
+                        this.swipeRight.classList.remove('visible');
+                    } else if (deltaX < -50) {
+                        this.swipeRight.classList.add('visible');
+                        this.swipeLeft.classList.remove('visible');
+                    } else {
+                        this.swipeLeft.classList.remove('visible');
+                        this.swipeRight.classList.remove('visible');
+                    }
+                } else if (direction === 'vertical') {
+                    // Вертикальный скролл - обрабатывается в setupSmoothScroll
                 }
-                
-                // Рассчитываем скорость для инерции
-                if (timeDiff > 0) {
-                    this.swipeState.velocity = deltaX / timeDiff;
-                }
-                this.swipeState.lastMoveTime = currentTime;
             }
         };
         
-        const handleEnd = (clientX) => {
-            if (startX === undefined || !this.swipeState.isSwiping) {
+        const handleEnd = (clientX, clientY) => {
+            if (startX === undefined || !isSwiping) {
                 startX = undefined;
+                
+                // Восстанавливаем скролл
+                const currentDay = getCurrentDayElement();
+                if (currentDay) {
+                    currentDay.style.overflowY = 'scroll';
+                }
                 return;
             }
             
             const deltaX = clientX - startX;
             const timeDiff = Date.now() - startTime;
-            const velocity = this.swipeState.velocity;
             
-            if (this.swipeState.direction === 'horizontal') {
+            if (direction === 'horizontal') {
                 // Определяем, нужно ли переключить день
                 const threshold = window.innerWidth * 0.25;
-                const velocityThreshold = 0.5;
+                const velocityThreshold = 0.3;
+                const velocity = deltaX / timeDiff;
                 
                 let shouldNavigate = false;
-                let direction = 0;
+                let navDirection = 0;
                 
                 if (Math.abs(deltaX) > threshold) {
                     shouldNavigate = true;
-                    direction = deltaX > 0 ? -1 : 1;
+                    navDirection = deltaX > 0 ? -1 : 1;
                 } else if (Math.abs(velocity) > velocityThreshold && timeDiff < 300) {
                     shouldNavigate = true;
-                    direction = velocity > 0 ? -1 : 1;
+                    navDirection = velocity > 0 ? -1 : 1;
                 }
                 
                 if (shouldNavigate) {
-                    this.navigateDays(direction);
+                    this.navigateDays(navDirection);
                 } else {
-                    // Возвращаем на место с анимацией
+                    // Возвращаем на место
                     this.days.forEach(day => {
                         day.element.style.transition = 'transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
                     });
                     this.updateDayPositions();
                 }
                 
-                // Скрываем индикаторы
                 this.swipeLeft.classList.remove('visible');
                 this.swipeRight.classList.remove('visible');
             }
             
-            // Сбрасываем состояние
-            this.swipeState.isSwiping = false;
-            this.swipeState.direction = null;
+            // Восстанавливаем скролл
+            const currentDay = getCurrentDayElement();
+            if (currentDay) {
+                currentDay.style.overflowY = 'scroll';
+            }
+            
+            isSwiping = false;
+            direction = null;
             startX = undefined;
         };
         
         // Touch события
         this.daysContainer.addEventListener('touchstart', (e) => {
             if (e.touches.length !== 1) return;
-            e.preventDefault();
             const touch = e.touches[0];
             handleStart(touch.clientX, touch.clientY);
-        }, { passive: false });
+        }, { passive: true });
         
         this.daysContainer.addEventListener('touchmove', (e) => {
-            if (!this.swipeState.isSwiping || e.touches.length !== 1) return;
-            e.preventDefault();
+            if (!isSwiping || e.touches.length !== 1) return;
             const touch = e.touches[0];
             handleMove(touch.clientX, touch.clientY);
         }, { passive: false });
@@ -398,21 +578,17 @@ class PersonalCalendar {
         this.daysContainer.addEventListener('touchend', (e) => {
             if (startX === undefined) return;
             const touch = e.changedTouches[0];
-            handleEnd(touch.clientX);
+            handleEnd(touch.clientX, touch.clientY);
         });
         
         // Mouse события
         this.daysContainer.addEventListener('mousedown', (e) => {
             if (e.button !== 0) return;
-            e.preventDefault();
             handleStart(e.clientX, e.clientY);
             
-            const onMouseMove = (e) => {
-                handleMove(e.clientX, e.clientY);
-            };
-            
+            const onMouseMove = (e) => handleMove(e.clientX, e.clientY);
             const onMouseUp = (e) => {
-                handleEnd(e.clientX);
+                handleEnd(e.clientX, e.clientY);
                 document.removeEventListener('mousemove', onMouseMove);
                 document.removeEventListener('mouseup', onMouseUp);
             };
@@ -422,28 +598,27 @@ class PersonalCalendar {
         });
     }
     
-    setupCreationListeners() {
+    setupEventCreation() {
         // Клик по сетке для создания события
         this.daysContainer.addEventListener('click', (e) => {
-            // Проверяем, что клик не на событии и не на интерактивном элементе
+            // Проверяем, что клик не на событии
             if (e.target.closest('.event') || 
                 e.target.closest('.event-resize-handle') ||
                 e.target.closest('.preview-resize-handle')) {
                 return;
             }
             
-            // Находим день по координатам
+            // Находим день
             const dayElement = e.target.closest('.day-wrapper');
             if (!dayElement) return;
             
             const dayIndex = parseInt(dayElement.dataset.index);
             const day = this.days[dayIndex];
             
-            // Получаем позицию относительно сетки
-            const rect = day.scrollElement.getBoundingClientRect();
-            const y = e.clientY - rect.top + day.scrollElement.scrollTop;
+            // Получаем позицию
+            const rect = day.gridWrapper.getBoundingClientRect();
+            const y = e.clientY - rect.top + day.gridWrapper.scrollTop;
             
-            // Создаем событие
             this.startEventCreation(dayIndex, y);
         });
         
@@ -451,36 +626,31 @@ class PersonalCalendar {
         const topHandle = this.eventPreview.querySelector('.preview-resize-handle.top');
         const bottomHandle = this.eventPreview.querySelector('.preview-resize-handle.bottom');
         
-        topHandle.addEventListener('mousedown', (e) => this.startPreviewResize(e, 'top'));
-        bottomHandle.addEventListener('mousedown', (e) => this.startPreviewResize(e, 'bottom'));
-        
-        topHandle.addEventListener('touchstart', (e) => this.startPreviewResize(e, 'top'));
-        bottomHandle.addEventListener('touchstart', (e) => this.startPreviewResize(e, 'bottom'));
+        this.setupPreviewResize(topHandle, 'top');
+        this.setupPreviewResize(bottomHandle, 'bottom');
     }
     
     startEventCreation(dayIndex, y) {
         const day = this.days[dayIndex];
-        const gridHeight = day.scrollElement.scrollHeight;
-        const visibleHeight = day.scrollElement.clientHeight;
+        const gridHeight = day.grid.scrollHeight;
         
         // Нормализуем позицию
         const relativeY = Math.min(Math.max(y, 0), gridHeight);
         const startPercent = (relativeY / gridHeight) * 100;
         
-        // Начальные значения
+        // Начальные значения (15 минут шаг)
         const startMinutes = Math.round((startPercent / 100) * 1440 / 15) * 15;
-        const endMinutes = startMinutes + 60;
+        const endMinutes = startMinutes + 60; // 1 час по умолчанию
         
         // Показываем preview
-        this.showEventPreview(day, startPercent, endMinutes - startMinutes);
+        this.showEventPreview(day, startPercent, 60);
         
         // Сохраняем состояние
         this.creationState.isCreating = true;
         this.creationState.dayIndex = dayIndex;
         this.creationState.startY = relativeY;
-        this.creationState.endY = relativeY + (visibleHeight * 0.1); // 10% высоты экрана
         
-        // Через 300мс открываем sheet
+        // Открываем sheet
         setTimeout(() => {
             if (this.creationState.isCreating) {
                 this.showCreateEventSheet(
@@ -501,81 +671,104 @@ class PersonalCalendar {
         this.eventPreview.classList.add('visible');
         
         // Добавляем в правильный день
-        day.element.appendChild(this.eventPreview);
+        day.eventsContainer.appendChild(this.eventPreview);
     }
     
-    startPreviewResize(e, edge) {
-        e.stopPropagation();
-        e.preventDefault();
+    setupPreviewResize(handle, edge) {
+        let isResizing = false;
+        let startY = 0;
+        let startTop = 0;
+        let startHeight = 0;
         
-        if (!this.creationState.isCreating) return;
-        
-        this.creationState.resizeEdge = edge;
-        const startY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
-        const startTop = parseFloat(this.eventPreview.style.top);
-        const startHeight = parseFloat(this.eventPreview.style.height);
+        const startResize = (clientY) => {
+            if (!this.creationState.isCreating) return;
+            
+            isResizing = true;
+            startY = clientY;
+            startTop = parseFloat(this.eventPreview.style.top);
+            startHeight = parseFloat(this.eventPreview.style.height);
+            
+            this.creationState.resizeEdge = edge;
+        };
         
         const onMove = (clientY) => {
+            if (!isResizing) return;
+            
             const day = this.days[this.creationState.dayIndex];
             const deltaY = clientY - startY;
-            const deltaPercent = (deltaY / day.scrollElement.clientHeight) * 100;
+            const deltaPercent = (deltaY / day.gridWrapper.clientHeight) * 100;
             
             let newTop = startTop;
             let newHeight = startHeight;
             
+            // Дискретный шаг 15 минут (2.5%)
+            const snapStep = 2.5;
+            
             if (edge === 'top') {
-                newTop = Math.max(0, Math.min(startTop + deltaPercent, startTop + startHeight - 2.5));
+                newTop = startTop + deltaPercent;
+                newTop = Math.round(newTop / snapStep) * snapStep;
+                newTop = Math.max(0, Math.min(newTop, startTop + startHeight - snapStep));
                 newHeight = startHeight + startTop - newTop;
             } else {
-                newHeight = Math.max(2.5, Math.min(startHeight + deltaPercent, 100 - startTop));
+                newHeight = startHeight + deltaPercent;
+                newHeight = Math.round(newHeight / snapStep) * snapStep;
+                newHeight = Math.max(snapStep, Math.min(newHeight, 100 - startTop));
             }
             
-            // Плавное изменение
-            this.eventPreview.style.transition = 'top 0.1s, height 0.1s';
+            // Обновляем preview
             this.eventPreview.style.top = `${newTop}%`;
             this.eventPreview.style.height = `${newHeight}%`;
             
-            // Обновляем время в sheet если он открыт
+            // Обновляем время в sheet
             if (this.sheet.classList.contains('open')) {
-                const startMinutes = Math.round((newTop / 100) * 1440 / 15) * 15;
-                const endMinutes = startMinutes + Math.round((newHeight / 100) * 1440 / 15) * 15;
+                const startMinutes = Math.round((newTop / 100) * 1440);
+                const endMinutes = startMinutes + Math.round((newHeight / 100) * 1440);
                 
                 this.eventStartTime.value = this.minutesToTime(startMinutes);
                 this.eventEndTime.value = this.minutesToTime(endMinutes);
             }
         };
         
-        const onEnd = () => {
-            this.eventPreview.style.transition = '';
+        const endResize = () => {
+            isResizing = false;
             this.creationState.resizeEdge = null;
         };
         
         // Мышь
-        if (!e.type.includes('touch')) {
+        handle.addEventListener('mousedown', (e) => {
+            e.stopPropagation();
+            startResize(e.clientY);
+            
             const onMouseMove = (e) => onMove(e.clientY);
             const onMouseUp = () => {
-                onEnd();
+                endResize();
                 document.removeEventListener('mousemove', onMouseMove);
                 document.removeEventListener('mouseup', onMouseUp);
             };
             
             document.addEventListener('mousemove', onMouseMove);
             document.addEventListener('mouseup', onMouseUp);
-        } else {
-            // Тач
+        });
+        
+        // Тач
+        handle.addEventListener('touchstart', (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            startResize(e.touches[0].clientY);
+            
             const onTouchMove = (e) => {
                 e.preventDefault();
                 onMove(e.touches[0].clientY);
             };
             const onTouchEnd = () => {
-                onEnd();
+                endResize();
                 document.removeEventListener('touchmove', onTouchMove);
                 document.removeEventListener('touchend', onTouchEnd);
             };
             
             document.addEventListener('touchmove', onTouchMove, { passive: false });
             document.addEventListener('touchend', onTouchEnd);
-        }
+        });
     }
     
     navigateDays(direction) {
@@ -586,113 +779,9 @@ class PersonalCalendar {
             this.currentDate = new Date(this.days[newIndex].date);
             this.updateDisplay();
             this.updateDayPositions();
-            
-            // Подгружаем события для соседних дней если нужно
-            this.checkAndLoadMoreDays();
-        } else {
-            // Нужно создать новые дни
-            this.shiftDays(direction);
+            this.updateCurrentTimeLine();
+            this.setupScrollForCurrentDay();
         }
-        
-        // Обновляем линию времени
-        this.updateCurrentTimeLine();
-    }
-    
-    shiftDays(direction) {
-        // Сдвигаем массив дней
-        if (direction > 0) {
-            // Удаляем первый день, добавляем новый в конец
-            const firstDay = this.days.shift();
-            firstDay.element.remove();
-            
-            const newDate = new Date(this.days[this.days.length - 1].date);
-            newDate.setDate(newDate.getDate() + 1);
-            
-            this.createDayElement(newDate, this.days.length);
-            
-            // Обновляем индексы
-            this.days.forEach((day, index) => {
-                day.element.dataset.index = index;
-            });
-            
-            this.currentDayIndex--;
-        } else {
-            // Удаляем последний день, добавляем новый в начало
-            const lastDay = this.days.pop();
-            lastDay.element.remove();
-            
-            const newDate = new Date(this.days[0].date);
-            newDate.setDate(newDate.getDate() - 1);
-            
-            this.createDayElement(newDate, -1);
-            this.days.unshift(this.days[0]);
-            this.days[0] = this.days[1];
-            this.days[1] = this.createDayData(newDate, 0);
-            
-            // Обновляем индексы
-            this.days.forEach((day, index) => {
-                if (day.element) {
-                    day.element.dataset.index = index;
-                }
-            });
-            
-            this.currentDayIndex++;
-        }
-        
-        this.updateDayPositions();
-        this.loadAllEvents();
-    }
-    
-    createDayElement(date, index) {
-        const dayWrapper = document.createElement('div');
-        dayWrapper.className = 'day-wrapper';
-        dayWrapper.dataset.date = date.toISOString().split('T')[0];
-        dayWrapper.dataset.index = index;
-        
-        const dayScroll = document.createElement('div');
-        dayScroll.className = 'day-scroll';
-        
-        const dayGrid = document.createElement('div');
-        dayGrid.className = 'day-grid';
-        
-        const eventsContainer = document.createElement('div');
-        eventsContainer.className = 'events-container';
-        
-        const dockingZone = document.createElement('div');
-        dockingZone.className = 'sheet-docking-zone';
-        
-        this.generateTimeGrid(dayGrid);
-        
-        dayScroll.appendChild(dayGrid);
-        dayWrapper.appendChild(dayScroll);
-        dayWrapper.appendChild(eventsContainer);
-        dayWrapper.appendChild(dockingZone);
-        this.daysContainer.appendChild(dayWrapper);
-        
-        return {
-            element: dayWrapper,
-            date: date,
-            scrollElement: dayScroll,
-            eventsContainer: eventsContainer,
-            dockingZone: dockingZone,
-            events: []
-        };
-    }
-    
-    createDayData(date, index) {
-        const element = this.createDayElement(date, index);
-        return element;
-    }
-    
-    checkAndLoadMoreDays() {
-        // Загружаем события для соседних дней
-        const indicesToLoad = [];
-        if (this.currentDayIndex <= 1) indicesToLoad.push(0);
-        if (this.currentDayIndex >= this.days.length - 2) indicesToLoad.push(this.days.length - 1);
-        
-        indicesToLoad.forEach(index => {
-            this.loadEventsForDay(index);
-        });
     }
     
     loadAllEvents() {
@@ -711,46 +800,13 @@ class PersonalCalendar {
         // Сортируем события
         day.events.sort((a, b) => this.timeToMinutes(a.startTime) - this.timeToMinutes(b.startTime));
         
-        // Группируем пересекающиеся события
-        const groups = this.groupOverlappingEvents(day.events);
-        
-        groups.forEach((group, groupIndex) => {
-            group.forEach((event, eventIndex) => {
-                this.createEventElement(event, group.length, eventIndex, day);
-            });
+        // Создаем элементы событий
+        day.events.forEach(event => {
+            this.createEventElement(event, day);
         });
     }
     
-    groupOverlappingEvents(events) {
-        if (events.length === 0) return [];
-        
-        const groups = [];
-        let currentGroup = [];
-        let lastEnd = -1;
-        
-        events.forEach(event => {
-            const start = this.timeToMinutes(event.startTime);
-            
-            if (start >= lastEnd) {
-                if (currentGroup.length > 0) {
-                    groups.push([...currentGroup]);
-                }
-                currentGroup = [event];
-                lastEnd = this.timeToMinutes(event.endTime);
-            } else {
-                currentGroup.push(event);
-                lastEnd = Math.max(lastEnd, this.timeToMinutes(event.endTime));
-            }
-        });
-        
-        if (currentGroup.length > 0) {
-            groups.push(currentGroup);
-        }
-        
-        return groups;
-    }
-    
-    createEventElement(event, groupSize, indexInGroup, day) {
+    createEventElement(event, day) {
         const startMinutes = this.timeToMinutes(event.startTime);
         const endMinutes = this.timeToMinutes(event.endTime);
         const duration = endMinutes - startMinutes;
@@ -762,14 +818,10 @@ class PersonalCalendar {
         eventElement.className = 'event';
         eventElement.dataset.eventId = event.id;
         
-        // Позиционирование для пересекающихся событий
-        const left = 8 + (indexInGroup * 4);
-        const width = groupSize > 1 ? `calc(100% - ${(groupSize * 4) + 4}px)` : 'calc(100% - 16px)';
-        
         eventElement.style.top = `${top}%`;
         eventElement.style.height = `${height}%`;
-        eventElement.style.left = `${left}px`;
-        eventElement.style.width = width;
+        eventElement.style.left = '8px';
+        eventElement.style.right = '8px';
         
         const color = this.colors.find(c => c.id === event.colorId) || this.colors[0];
         eventElement.style.backgroundColor = color.value;
@@ -781,14 +833,12 @@ class PersonalCalendar {
             <div class="event-time">${event.startTime} - ${event.endTime}</div>
         `;
         
-        // Ручки для resize (только при редактировании)
+        // Ручки для resize (изначально скрыты)
         const topHandle = document.createElement('div');
         topHandle.className = 'event-resize-handle top';
-        topHandle.dataset.edge = 'top';
         
         const bottomHandle = document.createElement('div');
         bottomHandle.className = 'event-resize-handle bottom';
-        bottomHandle.dataset.edge = 'bottom';
         
         eventElement.appendChild(content);
         eventElement.appendChild(topHandle);
@@ -803,51 +853,65 @@ class PersonalCalendar {
         // Drag & Drop события
         this.setupEventDrag(eventElement, event, day);
         
-        // Resize только при активном редактировании
-        const setupResize = (handle, edge) => {
-            handle.addEventListener('mousedown', (e) => this.startEventResize(e, eventElement, event, edge, day));
-            handle.addEventListener('touchstart', (e) => this.startEventResize(e, eventElement, event, edge, day));
-        };
-        
-        setupResize(topHandle, 'top');
-        setupResize(bottomHandle, 'bottom');
+        // Resize события
+        this.setupEventResize(topHandle, eventElement, event, day, 'top');
+        this.setupEventResize(bottomHandle, eventElement, event, day, 'bottom');
         
         day.eventsContainer.appendChild(eventElement);
+        return eventElement;
     }
     
     setupEventDrag(element, event, day) {
         let isDragging = false;
         let startY = 0;
         let startTop = 0;
+        let currentTop = 0;
+        let momentumId = null;
+        
+        const snapToGrid = (top) => {
+            const snapStep = 2.5; // 15 минут в процентах
+            return Math.round(top / snapStep) * snapStep;
+        };
         
         const startDrag = (clientY) => {
-            if (this.timeEditState.isResizing) return;
+            if (this.dragState.isDragging || this.resizeState.isResizing) return;
             
             isDragging = true;
             startY = clientY;
             startTop = parseFloat(element.style.top);
+            currentTop = startTop;
+            
             element.classList.add('dragging');
+            
+            if (momentumId) {
+                cancelAnimationFrame(momentumId);
+                momentumId = null;
+            }
         };
         
         const onMove = (clientY) => {
             if (!isDragging) return;
             
             const deltaY = clientY - startY;
-            const deltaPercent = (deltaY / day.scrollElement.clientHeight) * 100;
-            const newTop = Math.max(0, Math.min(startTop + deltaPercent, 100 - parseFloat(element.style.height)));
+            const deltaPercent = (deltaY / day.gridWrapper.clientHeight) * 100;
+            let newTop = startTop + deltaPercent;
             
-            // Плавное движение
-            element.style.transition = 'top 0.1s';
+            // Ограничиваем сверху и снизу
+            const elementHeight = parseFloat(element.style.height);
+            newTop = Math.max(0, Math.min(newTop, 100 - elementHeight));
+            
+            // Следим за пальцем точно
             element.style.top = `${newTop}%`;
+            currentTop = newTop;
             
-            // Обновляем время события
-            const newMinutes = Math.round((newTop / 100) * 1440 / 15) * 15;
+            // Обновляем данные события (но не snap пока)
+            const newMinutes = (newTop / 100) * 1440;
             const duration = this.timeToMinutes(event.endTime) - this.timeToMinutes(event.startTime);
             
             event.startTime = this.minutesToTime(newMinutes);
             event.endTime = this.minutesToTime(newMinutes + duration);
             
-            // Обновляем отображение времени
+            // Обновляем отображение
             const timeElement = element.querySelector('.event-time');
             if (timeElement) {
                 timeElement.textContent = `${event.startTime} - ${event.endTime}`;
@@ -858,10 +922,27 @@ class PersonalCalendar {
             if (!isDragging) return;
             
             isDragging = false;
-            element.classList.remove('dragging');
-            element.style.transition = '';
             
-            // Сохраняем изменения
+            // Применяем snap к сетке
+            const snappedTop = snapToGrid(currentTop);
+            element.style.top = `${snappedTop}%`;
+            
+            // Обновляем данные события с snap
+            const snappedMinutes = Math.round((snappedTop / 100) * 1440 / 15) * 15;
+            const duration = this.timeToMinutes(event.endTime) - this.timeToMinutes(event.startTime);
+            
+            event.startTime = this.minutesToTime(snappedMinutes);
+            event.endTime = this.minutesToTime(snappedMinutes + duration);
+            
+            // Обновляем отображение
+            const timeElement = element.querySelector('.event-time');
+            if (timeElement) {
+                timeElement.textContent = `${event.startTime} - ${event.endTime}`;
+            }
+            
+            element.classList.remove('dragging');
+            
+            // Сохраняем
             localStorage.setItem('calendarEvents', JSON.stringify(this.events));
         };
         
@@ -903,91 +984,139 @@ class PersonalCalendar {
         });
     }
     
-    startEventResize(e, element, event, edge, day) {
-        e.stopPropagation();
-        e.preventDefault();
+    setupEventResize(handle, element, event, day, edge) {
+        let isResizing = false;
+        let startY = 0;
+        let startTop = 0;
+        let startHeight = 0;
+        let currentTop = 0;
+        let currentHeight = 0;
         
-        // Помечаем событие как редактируемое для показа ручек
-        element.classList.add('editing');
+        const snapToGrid = (value) => {
+            const snapStep = 2.5;
+            return Math.round(value / snapStep) * snapStep;
+        };
         
-        this.timeEditState.isResizing = true;
-        this.timeEditState.resizeEdge = edge;
-        this.timeEditState.element = element;
-        this.timeEditState.event = event;
-        this.timeEditState.startY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
-        this.timeEditState.startTop = parseFloat(element.style.top);
-        this.timeEditState.startHeight = parseFloat(element.style.height);
+        const startResize = (clientY) => {
+            if (this.dragState.isDragging) return;
+            
+            isResizing = true;
+            startY = clientY;
+            startTop = parseFloat(element.style.top);
+            startHeight = parseFloat(element.style.height);
+            currentTop = startTop;
+            currentHeight = startHeight;
+            
+            // Показываем ручки (если еще не показаны)
+            element.classList.add('editing');
+        };
         
         const onMove = (clientY) => {
-            const deltaY = clientY - this.timeEditState.startY;
-            const deltaPercent = (deltaY / day.scrollElement.clientHeight) * 100;
+            if (!isResizing) return;
             
-            let newTop = this.timeEditState.startTop;
-            let newHeight = this.timeEditState.startHeight;
+            const deltaY = clientY - startY;
+            const deltaPercent = (deltaY / day.gridWrapper.clientHeight) * 100;
+            
+            let newTop = startTop;
+            let newHeight = startHeight;
             
             if (edge === 'top') {
-                newTop = Math.max(0, Math.min(this.timeEditState.startTop + deltaPercent, 
-                    this.timeEditState.startTop + this.timeEditState.startHeight - 2.5));
-                newHeight = this.timeEditState.startHeight + this.timeEditState.startTop - newTop;
+                newTop = startTop + deltaPercent;
+                newTop = Math.max(0, Math.min(newTop, startTop + startHeight - 2.5));
+                newHeight = startHeight + startTop - newTop;
             } else {
-                newHeight = Math.max(2.5, Math.min(this.timeEditState.startHeight + deltaPercent, 
-                    100 - this.timeEditState.startTop));
+                newHeight = startHeight + deltaPercent;
+                newHeight = Math.max(2.5, Math.min(newHeight, 100 - startTop));
             }
             
-            // Плавное изменение
-            element.style.transition = 'top 0.1s, height 0.1s';
+            // Обновляем элемент
             element.style.top = `${newTop}%`;
             element.style.height = `${newHeight}%`;
             
-            // Обновляем время события
-            const startMinutes = Math.round((newTop / 100) * 1440 / 15) * 15;
-            const endMinutes = startMinutes + Math.round((newHeight / 100) * 1440 / 15) * 15;
+            currentTop = newTop;
+            currentHeight = newHeight;
+            
+            // Обновляем данные события (без snap)
+            const startMinutes = (newTop / 100) * 1440;
+            const endMinutes = startMinutes + (newHeight / 100) * 1440;
             
             event.startTime = this.minutesToTime(startMinutes);
             event.endTime = this.minutesToTime(endMinutes);
             
-            // Обновляем отображение времени
+            // Обновляем отображение
             const timeElement = element.querySelector('.event-time');
             if (timeElement) {
                 timeElement.textContent = `${event.startTime} - ${event.endTime}`;
             }
         };
         
-        const onEnd = () => {
-            this.timeEditState.isResizing = false;
-            element.classList.remove('editing');
-            element.style.transition = '';
+        const endResize = () => {
+            if (!isResizing) return;
             
-            // Сохраняем изменения
+            isResizing = false;
+            
+            // Применяем snap к сетке
+            const snappedTop = snapToGrid(currentTop);
+            const snappedHeight = snapToGrid(currentHeight);
+            
+            element.style.top = `${snappedTop}%`;
+            element.style.height = `${snappedHeight}%`;
+            
+            // Обновляем данные события с snap
+            const startMinutes = Math.round((snappedTop / 100) * 1440 / 15) * 15;
+            const endMinutes = startMinutes + Math.round((snappedHeight / 100) * 1440 / 15) * 15;
+            
+            event.startTime = this.minutesToTime(startMinutes);
+            event.endTime = this.minutesToTime(endMinutes);
+            
+            // Обновляем отображение
+            const timeElement = element.querySelector('.event-time');
+            if (timeElement) {
+                timeElement.textContent = `${event.startTime} - ${event.endTime}`;
+            }
+            
+            // Скрываем ручки
+            element.classList.remove('editing');
+            
+            // Сохраняем
             localStorage.setItem('calendarEvents', JSON.stringify(this.events));
         };
         
         // Мышь
-        if (!e.type.includes('touch')) {
+        handle.addEventListener('mousedown', (e) => {
+            e.stopPropagation();
+            startResize(e.clientY);
+            
             const onMouseMove = (e) => onMove(e.clientY);
             const onMouseUp = () => {
-                onEnd();
+                endResize();
                 document.removeEventListener('mousemove', onMouseMove);
                 document.removeEventListener('mouseup', onMouseUp);
             };
             
             document.addEventListener('mousemove', onMouseMove);
             document.addEventListener('mouseup', onMouseUp);
-        } else {
-            // Тач
+        });
+        
+        // Тач
+        handle.addEventListener('touchstart', (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            startResize(e.touches[0].clientY);
+            
             const onTouchMove = (e) => {
                 e.preventDefault();
                 onMove(e.touches[0].clientY);
             };
             const onTouchEnd = () => {
-                onEnd();
+                endResize();
                 document.removeEventListener('touchmove', onTouchMove);
                 document.removeEventListener('touchend', onTouchEnd);
             };
             
             document.addEventListener('touchmove', onTouchMove, { passive: false });
             document.addEventListener('touchend', onTouchEnd);
-        }
+        });
     }
     
     showCreateEventSheet(startTime = '09:00', endTime = '10:00') {
@@ -1018,6 +1147,17 @@ class PersonalCalendar {
     showEditEventSheet(eventId) {
         const event = this.events.find(e => e.id === eventId);
         if (!event) return;
+        
+        // Помечаем все события как нередактируемые
+        document.querySelectorAll('.event.editing').forEach(el => {
+            el.classList.remove('editing');
+        });
+        
+        // Помечаем текущее событие как редактируемое
+        const eventElement = document.querySelector(`.event[data-event-id="${eventId}"]`);
+        if (eventElement) {
+            eventElement.classList.add('editing');
+        }
         
         this.editingEventId = eventId;
         this.sheetTitle.textContent = 'Редактировать событие';
@@ -1076,6 +1216,11 @@ class PersonalCalendar {
         this.sheetOverlay.classList.remove('visible');
         document.body.style.overflow = '';
         
+        // Скрываем ручки редактирования
+        document.querySelectorAll('.event.editing').forEach(el => {
+            el.classList.remove('editing');
+        });
+        
         setTimeout(() => {
             this.expandedContent.style.display = '';
             this.sheetState.isDocked = false;
@@ -1085,47 +1230,6 @@ class PersonalCalendar {
     expandSheet() {
         this.expandedContent.style.display = 'block';
         this.expandedContent.classList.add('slide-in');
-    }
-    
-    scrollSheetToInput() {
-        // Прокручиваем sheet чтобы показать поле ввода когда открывается клавиатура
-        setTimeout(() => {
-            const inputRect = this.eventTitleInput.getBoundingClientRect();
-            const sheetRect = this.sheetContent.getBoundingClientRect();
-            
-            if (inputRect.bottom > sheetRect.bottom - 100) {
-                this.eventTitleInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }
-        }, 100);
-    }
-    
-    setupKeyboardDetection() {
-        // Определяем открытие/закрытие клавиатуры
-        const visualViewport = window.visualViewport;
-        
-        if (visualViewport) {
-            visualViewport.addEventListener('resize', () => {
-                if (visualViewport.height < window.innerHeight * 0.7) {
-                    // Клавиатура открыта
-                    document.body.classList.add('keyboard-open');
-                    this.scrollSheetToInput();
-                } else {
-                    // Клавиатура закрыта
-                    document.body.classList.remove('keyboard-open');
-                }
-            });
-        }
-        
-        // Также слушаем фокус на инпутах
-        const inputs = [this.eventTitleInput, this.eventStartTime, this.eventEndTime, 
-                       this.eventDescription, this.eventRepeat];
-        inputs.forEach(input => {
-            input.addEventListener('focus', () => {
-                setTimeout(() => {
-                    this.scrollSheetToInput();
-                }, 300);
-            });
-        });
     }
     
     startSheetDrag(e) {
@@ -1147,10 +1251,7 @@ class PersonalCalendar {
             const percentVisible = (newHeight / (window.innerHeight * 0.9)) * 100;
             
             if (percentVisible < 30) {
-                // Притягиваем к док-зоне
                 this.sheet.classList.add('docked');
-                
-                // Показываем док-зону на текущем дне
                 const currentDay = this.days[this.currentDayIndex];
                 if (currentDay) {
                     currentDay.dockingZone.classList.add('active');
@@ -1173,7 +1274,6 @@ class PersonalCalendar {
             }
         };
         
-        // Мышь
         if (!e.type.includes('touch')) {
             const onMouseMove = (e) => onMove(e.clientY);
             const onMouseUp = () => {
@@ -1185,7 +1285,6 @@ class PersonalCalendar {
             document.addEventListener('mousemove', onMouseMove);
             document.addEventListener('mouseup', onMouseUp);
         } else {
-            // Тач
             const onTouchMove = (e) => {
                 e.preventDefault();
                 onMove(e.touches[0].clientY);
@@ -1276,24 +1375,19 @@ class PersonalCalendar {
         
         if (!currentDay) return;
         
-        // Проверяем, что это сегодня
         const isToday = now.toDateString() === currentDay.date.toDateString();
         
         if (isToday) {
             const minutesSinceMidnight = now.getHours() * 60 + now.getMinutes();
-            const topPosition = (minutesSinceMidnight / 1440) * 100;
+            const topPercent = (minutesSinceMidnight / 1440) * 100;
             
-            // Получаем позицию относительно видимого дня
-            const dayRect = currentDay.scrollElement.getBoundingClientRect();
-            const scrollTop = currentDay.scrollElement.scrollTop;
-            const scrollHeight = currentDay.scrollElement.scrollHeight;
-            const clientHeight = currentDay.scrollElement.clientHeight;
+            const gridRect = currentDay.grid.getBoundingClientRect();
+            const wrapperRect = currentDay.gridWrapper.getBoundingClientRect();
+            const scrollTop = currentDay.gridWrapper.scrollTop;
             
-            // Рассчитываем абсолютную позицию на экране
-            const absoluteTop = dayRect.top + (scrollHeight * (topPosition / 100)) - scrollTop;
+            const absoluteTop = wrapperRect.top + (gridRect.height * (topPercent / 100)) - scrollTop;
             
-            // Показываем только если линия в видимой области
-            if (absoluteTop >= dayRect.top && absoluteTop <= dayRect.top + clientHeight) {
+            if (absoluteTop >= wrapperRect.top && absoluteTop <= wrapperRect.bottom) {
                 this.currentTimeLine.style.top = `${absoluteTop}px`;
                 this.currentTimeLine.style.display = 'block';
             } else {
@@ -1302,36 +1396,12 @@ class PersonalCalendar {
         } else {
             this.currentTimeLine.style.display = 'none';
         }
-        
-        // Обновляем при скролле
-        currentDay.scrollElement.addEventListener('scroll', () => {
-            this.updateCurrentTimeLine();
-        }, { passive: true });
     }
     
     goToToday() {
-        const today = new Date();
-        const todayStr = today.toISOString().split('T')[0];
-        
-        // Ищем день с сегодняшней датой
-        const todayIndex = this.days.findIndex(day => {
-            const dayStr = day.date.toISOString().split('T')[0];
-            return dayStr === todayStr;
-        });
-        
-        if (todayIndex !== -1) {
-            this.currentDayIndex = todayIndex;
-        } else {
-            // Создаем новый набор дней с сегодняшним днем в центре
-            this.currentDate = today;
-            this.setupDays();
-            this.currentDayIndex = 2; // Центр массива из 5 дней
-        }
-        
-        this.currentDate = today;
+        this.currentDate = new Date();
+        this.setupDays();
         this.updateDisplay();
-        this.updateDayPositions();
-        this.loadAllEvents();
         this.updateCurrentTimeLine();
     }
     
@@ -1354,7 +1424,7 @@ class PersonalCalendar {
     }
 }
 
-// Инициализация приложения
+// Инициализация
 document.addEventListener('DOMContentLoaded', () => {
     window.calendarApp = new PersonalCalendar();
 });
